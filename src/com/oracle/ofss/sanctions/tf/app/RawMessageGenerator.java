@@ -62,7 +62,7 @@ public class RawMessageGenerator {
             rawMessageJsonArray = generateRawMessageJsonArray(rs,props,srcFile,tableName,tagName,webserviceId,watchlistType,isStopwordEnabled,isSynonymEnabled);
 
             if(rawMessageJsonArray.length()>0){
-                writeRawMessagesToJsonFile(rawMessageJsonArray);
+                writeRawMessagesToJsonFile(rawMessageJsonArray, props);
             }
 
             logger.info("=============================================================");
@@ -618,18 +618,9 @@ public class RawMessageGenerator {
         }
     }
 
-    public static void writeRawMessagesToJsonFile(JSONArray jsonArray) throws IOException {
+    public static void writeRawMessagesToJsonFile(JSONArray jsonArray, Properties props) throws IOException {
         if (!Constants.OUTPUT_FOLDER.exists()) {
             Constants.OUTPUT_FOLDER.mkdirs();
-        }
-
-        // Load configuration for Excel splitting to match JSON splitting
-        Properties props = new Properties();
-        try (FileReader reader = new FileReader(Constants.CONFIG_FILE_PATH)) {
-            props.load(reader);
-        } catch (IOException e) {
-            logger.error("Error reading properties file for JSON splitting: {}", e.getMessage());
-            throw e;
         }
 
         int rowLimit = Constants.DEFAULT_ROW_LIMIT;
@@ -641,21 +632,34 @@ public class RawMessageGenerator {
             rowLimit = Constants.DEFAULT_ROW_LIMIT;
         }
 
+        String batchType = props.getProperty(Constants.BATCH_TYPE).toUpperCase();
+        String misDate = props.getProperty(Constants.MIS_DATE);
+        String runNo = props.getProperty(Constants.RUN_NO);
+
+        String prefix;
+        String shortPrefix;
+        if ("ISO20022".equals(batchType)) {
+            prefix = misDate + "_RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
+            shortPrefix = "RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
+        } else if ("NACHA".equals(batchType)) {
+            prefix = misDate + "_RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
+            shortPrefix = "RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
+        } else {
+            logger.error("Invalid batchtype: {}", batchType);
+            throw new IllegalArgumentException("Invalid batchtype");
+        }
+
+        List<String> fileList = new ArrayList<>();
+
         if (jsonArray.length() <= rowLimit) {
             // Write to a single file if splitting is not enabled or data is within limit
-            String fileName = String.format(Constants.OUTPUT_FILE_NAME_PATTERN, 1) + Constants.JSON_EXT;
+            String fileName = prefix + "1" + Constants.JSON_EXT;
             File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
             try (FileOutputStream fos = new FileOutputStream(outputFile)) {
                 fos.write(jsonArray.toString(4).getBytes(Constants.ENCODER));
             }
-            File countFile = new File(Constants.OUTPUT_FOLDER, Constants.OUTPUT_FILE_COUNT_PATH);
-            try (FileWriter fw = new FileWriter(countFile)) {
-                fw.write("1");
-            } catch (IOException e) {
-            logger.error("Error writing output file count to {}: {}", countFile.getAbsolutePath(), e.getMessage());
-            }
-            logger.info("Successfully wrote raw messages to JSON ({}) file.", outputFile.getName());
-            logger.info("Output file count (1) saved to: {}", countFile.getAbsolutePath());
+            fileList.add(shortPrefix + "1");
+            logger.info("Successfully wrote raw messages to JSON file: {}", fileName);
         } else {
             // Split data into multiple files
             int fileIndex = 1;
@@ -666,25 +670,29 @@ public class RawMessageGenerator {
                 for (int i = startIndex; i < endIndex; i++) {
                     chunk.put(jsonArray.getJSONObject(i));
                 }
-                String fileName = String.format(Constants.OUTPUT_FILE_NAME_PATTERN, fileIndex) + Constants.JSON_EXT;
+                String fileName = prefix + fileIndex + Constants.JSON_EXT;
                 File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
                 try (FileOutputStream fos = new FileOutputStream(outputFile)) {
                     fos.write(chunk.toString(4).getBytes(Constants.ENCODER));
                 }
-                logger.info("Successfully wrote raw messages to JSON ({}) file.", fileName);
+                fileList.add(shortPrefix + fileIndex);
+                logger.info("Successfully wrote raw messages to JSON file: {}", fileName);
                 fileIndex++;
                 startIndex = endIndex;
             }
-            // Store the count of output files created, adjusting for the last increment since fileIndex is incremented after the last file
-            File countFile = new File(Constants.OUTPUT_FOLDER, Constants.OUTPUT_FILE_COUNT_PATH);
-            int totalFiles = fileIndex - 1; // Adjust for the last increment
-            try (FileWriter fw = new FileWriter(countFile)) {
-                fw.write(String.valueOf(totalFiles));
-            } catch (IOException e) {
-                logger.error("Error writing output file count to {}: {}", countFile.getAbsolutePath(), e.getMessage());
-            }
-            logger.info("Successfully wrote to multiple Excel files with prefix ({}_N.xlsx).", Constants.OUTPUT_FILE_NAME);
-            logger.info("Output file count ({}) saved to: {}", totalFiles, countFile.getAbsolutePath());
+            logger.info("Successfully wrote to multiple JSON files with prefix: {}", prefix);
         }
+
+        // Write filename.txt
+        File listFile = new File(Constants.OUTPUT_FOLDER, Constants.FILE_NAME_LIST);
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(listFile))) {
+            for (String fileEntry : fileList) {
+                writer.write(fileEntry);
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            logger.error("Error writing filename.txt: {}", e.getMessage());
+        }
+        logger.info("filename.txt created with list of files.");
     }
 }

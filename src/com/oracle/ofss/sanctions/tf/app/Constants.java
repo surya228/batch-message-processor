@@ -47,6 +47,9 @@ public class Constants {
     public static final String TOGGLE_MATCHING_ENGINE = "toggleMatchingEngine";
 
     // Property Keys for Configuration
+    public static String BATCH_TYPE = "batchtype";
+    public static String MIS_DATE = "misdate";
+    public static String RUN_NO = "runNo";
     public static String TAGNAME = "tagName";
     public static String WEBSERVICE = "webService";
     public static String EXACT = "Exact";
@@ -127,7 +130,7 @@ public class Constants {
     public static String EXCEL_SPLIT_ROW_LIMIT = "excel.split.rowLimit";
     public static int DEFAULT_ROW_LIMIT = 1000;
     public static String OUTPUT_FILE_NAME_PATTERN = OUTPUT_FILE_NAME+"_%d";
-    public static String OUTPUT_FILE_COUNT_PATH = "generated_file_count.txt";
+    public static String FILE_NAME_LIST = "filename.txt";
 
     // Status strings
     public static String PASS = "PASS";

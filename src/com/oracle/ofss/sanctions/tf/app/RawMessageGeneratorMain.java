@@ -18,7 +18,7 @@ public class RawMessageGeneratorMain {
 
     public static void main(String[] args) throws Exception {
         logger.info("=============================================================");
-        logger.info("      INTELLIGENT RAW MESSAGE PROCESSOR UTILITY STARTED      ");
+        logger.info("               RAW MESSAGE GENERATOR STARTED                 ");
         logger.info("=============================================================");
         Date startDateObj = new Date();
         SimpleDateFormat dateFormat = new SimpleDateFormat(Constants.DATE_SUFFIX_FORMAT);
@@ -27,6 +27,24 @@ public class RawMessageGeneratorMain {
         String startTimeStr = timeFormat.format(startDateObj);
 
         Properties props = loadProperties();
+
+        // Validate new properties
+        String batchType = props.getProperty(Constants.BATCH_TYPE);
+        if (batchType == null || (!batchType.equalsIgnoreCase("ISO20022") && !batchType.equalsIgnoreCase("NACHA"))) {
+            logger.error("Invalid or missing batchtype in config.properties. Must be 'ISO20022' or 'NACHA'.");
+            System.exit(1);
+        }
+        String misDate = props.getProperty(Constants.MIS_DATE);
+        if (misDate == null || misDate.isEmpty()) {
+            logger.error("Missing misdate in config.properties.");
+            System.exit(1);
+        }
+        String runNo = props.getProperty(Constants.RUN_NO);
+        if (runNo == null || runNo.isEmpty()) {
+            logger.error("Missing runNo in config.properties.");
+            System.exit(1);
+        }
+
         saveConfigProperties(props);
 
         String renamePrefix = props.getProperty(Constants.WEBSERVICE) + "_";
@@ -34,9 +52,6 @@ public class RawMessageGeneratorMain {
         long startTime = System.currentTimeMillis();
 
         boolean isToggle = Constants.YES.equalsIgnoreCase(props.getProperty(Constants.TOGGLE_MATCHING_ENGINE));
-
-        // Delete previous output files and count file
-        deletePreviousFiles();
 
         // grenerate raw message
         int generatedCount = RawMessageGenerator.generateRawMessage(null, props); // Generation is always sequential
@@ -47,45 +62,23 @@ public class RawMessageGeneratorMain {
         logger.info("Raw Message Generator Completed");
 
         if (generatedCount > 0) {
-            int fileCount = 1;
+            // Calculate file count based on row limit
+            int rowLimit = Constants.DEFAULT_ROW_LIMIT;
             try {
-                File countFile = new File(Constants.OUTPUT_FOLDER, Constants.OUTPUT_FILE_COUNT_PATH);
-                if (countFile.exists()) {
-                    String countStr = new String(Files.readAllBytes(countFile.toPath())).trim();
-                    fileCount = Integer.parseInt(countStr);
-                }
-            } catch (Exception e) {
-                logger.error("Error reading file count: {}", e.getMessage());
+                String rowLimitStr = props.getProperty(Constants.EXCEL_SPLIT_ROW_LIMIT, String.valueOf(Constants.DEFAULT_ROW_LIMIT));
+                rowLimit = Integer.parseInt(rowLimitStr);
+            } catch (NumberFormatException e) {
+                logger.error("Invalid row limit value, using default: {}", Constants.DEFAULT_ROW_LIMIT);
             }
-            logger.info("Generated {} raw messages across {} Excel files.", generatedCount, fileCount);
+            int fileCount = (int) Math.ceil((double) generatedCount / rowLimit);
+            logger.info("Generated {} raw messages across {} JSON files.", generatedCount, fileCount);
         }
 
         logger.info("=============================================================");
-        logger.info("     INTELLIGENT RAW MESSAGE PROCESSOR UTILITY COMPLETED     ");
+        logger.info("               RAW MESSAGE GENERATOR ENDED                 ");
         logger.info("=============================================================");
         long endTime = System.currentTimeMillis();
         logger.info("Total time taken by utility: {} Seconds ", (endTime - startTime) / 1000L );
-    }
-
-    private static void deletePreviousFiles() {
-        File countFile = new File(Constants.OUTPUT_FOLDER, Constants.OUTPUT_FILE_COUNT_PATH);
-        if (countFile.exists()) {
-            if (countFile.delete()) {
-                logger.info("Deleted previous count file: {}", countFile.getName());
-            } else {
-                logger.error("Failed to delete previous count file: {}", countFile.getName());
-            }
-        }
-        File[] prevFiles = Constants.OUTPUT_FOLDER.listFiles((dir, name) -> name.matches(Constants.OUTPUT_FILE_NAME+"_\\d+\\.xlsx"));
-        if (prevFiles != null) {
-            for (File file : prevFiles) {
-                if (file.delete()) {
-                    logger.info("Deleted previous output file: {}", file.getName());
-                } else {
-                    logger.error("Failed to delete previous output file: {}", file.getName());
-                }
-            }
-        }
     }
 
     /**
