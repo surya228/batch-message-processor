@@ -170,4 +170,34 @@ public class Constants {
     public static final String MATCHES = "matches";
     public static final String MATCHED_WATCHLIST_ID = "matchedWatchlistId";
     public static final String RESPONSE_ID = "responseID";
+
+public static String getMatchHeaderSuffix(String webServiceId, String watchlistType) {
+        if (webServiceId.equals("3")) {
+            if (watchlistType.equalsIgnoreCase("COUNTRY")) {
+                return "Country";
+            } else if (watchlistType.equalsIgnoreCase("CITY")) {
+                return "City";
+            } else {
+                return "Country-City";
+            }
+        } else if (webServiceId.equals("4")) {
+            if (watchlistType.equalsIgnoreCase("COUNTRY")) {
+                return "Narrative Country";
+            } else if (watchlistType.equalsIgnoreCase("CITY")) {
+                return "Narrative City";
+            } else if (watchlistType.equalsIgnoreCase("GOODS")) {
+                return "Narrative Goods";
+            } else if (watchlistType.equalsIgnoreCase("PORT")) {
+                return "Narrative Port";
+            } else if (watchlistType.equalsIgnoreCase("IDENTIFIER")) {
+                return "Narrative Identifier";
+            } else if (watchlistType.equalsIgnoreCase("STOP_KEYWORDS")) {
+                return "Stopkeywords";
+            } else {
+                return "Narrative NameAndAddress";
+            }
+        } else {
+            return Constants.WEBSERVICE_MAP.get(webServiceId);
+        }
+    }
 }

@@ -1,12 +1,12 @@
 package com.oracle.ofss.sanctions.tf.app;
 
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.Row;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.sql.Connection;
@@ -14,19 +14,25 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class AnalyzerMain {
     private static Logger logger = LoggerFactory.getLogger(AnalyzerMain.class);
     public static void main(String[] args) throws Exception {
         logger.info("Hello World from Analyzer Main!!!");
 
-
         Properties props = loadProperties();
         String watchListType = props.getProperty(Constants.WATCHLIST_TYPE);
         String webServiceId = props.getProperty(Constants.WEBSERVICE_ID);
+        String webService = props.getProperty(Constants.WEBSERVICE);
         String tagName = props.getProperty(Constants.TAGNAME);
         String runSkey = props.getProperty(Constants.RUN_SKEY);
         String batchType = props.getProperty(Constants.BATCH_TYPE);
@@ -34,15 +40,19 @@ public class AnalyzerMain {
         int msgCategory = batchType.equalsIgnoreCase("ISO20022")?3:4;
         String msgCategoryString = batchType.equalsIgnoreCase("ISO20022")?"SEPA":"NACHA";
 
+        String misDate = props.getProperty(Constants.MIS_DATE);
+        String runNo = props.getProperty(Constants.RUN_NO);
 
+String matchHeader = "OS # " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " matches";
 
-
+        Map<Long, String> tokenToRawMsg;
         List<Long> transactionTokens;
         Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap;
         Map<Long, JSONObject> feedbackMap;
         Map<Long, JSONObject> tokenToAdditionalDataMap;
         try (Connection connection = SQLUtility.getDbConnection()) {
-            transactionTokens = getLisOfAllTransactions(connection,runSkey);
+            tokenToRawMsg = getTokenToRawMsg(connection, runSkey, batchType);
+            transactionTokens = new ArrayList<>(tokenToRawMsg.keySet());
             tokenToResponseIdToColumnNamesMap = getBulkColumnNameWLS(connection,transactionTokens,msgCategory);
             feedbackMap = getBulkResponsesFromFeedbackTable(connection,transactionTokens, msgCategoryString);
             tokenToAdditionalDataMap = getTokenToAdditionalDataMap(connection,transactionTokens,msgCategory);
@@ -51,16 +61,19 @@ public class AnalyzerMain {
             throw e;
         }
 
-        analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, watchListType, webServiceId, tagName);
+        List<ReportRow> reportRows = analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, watchListType, webServiceId, webService, tagName, runSkey, tokenToRawMsg);
+
+        writeExcel(reportRows, misDate, runNo, batchType, matchHeader);
 
     }
 
-    private static void analyzeResults(List<Long> transactionTokens, Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap,
+    private static List<ReportRow> analyzeResults(List<Long> transactionTokens, Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap,
                                        Map<Long, JSONObject> feedbackMap, Map<Long, JSONObject> tokenToAdditionalDataMap,
-                                       String watchListType, String webServiceId, String tagName) {
+                                       String watchListType, String webServiceId, String webService, String tagName, String runSkey, Map<Long, String> tokenToRawMsg) {
         // Parallel processing of each trxn token
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<CompletableFuture<Void>> futures = new ArrayList<>();
+        ConcurrentLinkedQueue<ReportRow> queue = new ConcurrentLinkedQueue<>();
         for (long transactionToken : transactionTokens) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
@@ -72,6 +85,7 @@ public class AnalyzerMain {
                     String targetColumnName;
                     String uid="";
                     boolean valueNotPresentFlag = false;
+
                     JSONObject additionalData = tokenToAdditionalDataMap.get(transactionToken);
                     if(additionalData.has(Constants.UID) && additionalData.has(Constants.COLUMN)){
                         uid = additionalData.getString(Constants.UID);
@@ -85,6 +99,7 @@ public class AnalyzerMain {
                     Map<Long, String> responseIdColumnNamesMap = tokenToResponseIdToColumnNamesMap.getOrDefault(transactionToken, Collections.emptyMap());
 
                     boolean failedDueToColumnMismatch = false;
+                    int filteredCount = 0;
                     if(!valueNotPresentFlag) {
                         for (int i = 0; i < matches.length(); i++) {
                             JSONObject match = matches.getJSONObject(i);
@@ -95,6 +110,12 @@ public class AnalyzerMain {
                             Long responseId = match.getLong(Constants.RESPONSE_ID);
                             String columnNameWls = responseIdColumnNamesMap.get(responseId);
                             Set<String> columnNames = columnNameWls != null ? Arrays.stream(columnNameWls.split(",")).collect(Collectors.toSet()) : Collections.emptySet();
+
+                            // Filtered count for OS # ... matches
+                            if (String.valueOf(match.optInt("webServiceID")).equals(webServiceId) &&
+                                    (!webServiceId.equals("3") && !webServiceId.equals("4") || match.optString("watchlistType").equalsIgnoreCase(watchListType))) {
+                                filteredCount++;
+                            }
 
                             boolean flag = uid.equals(targetUid)
                                     && watchListType.equalsIgnoreCase(match.optString("watchlistType"))
@@ -111,11 +132,41 @@ public class AnalyzerMain {
                                 }
                             }
                         }
+                        String testStatus = truePositives > 0 ? Constants.PASS : Constants.FAIL;
+                        logger.info("Status for trxn toke {} : {}",transactionToken,testStatus);
+                        if (Constants.FAIL.equalsIgnoreCase(testStatus))
+                            logger.info("failedDueToColumnMismatch : {}",failedDueToColumnMismatch);
+
+                        // Collect report row data
+                        int ced = additionalData.optInt(Constants.CED, 0);
+                        String type = "";
+                        if (ced == 0) type = Constants.EXACT;
+                        else if (ced > 0) type = Constants.FUZZY + ced + Constants.CED;
+                        else if (ced == -1) type = "STOPWORD";
+                        else if (ced == -2) type = "SYNONYM";
+
+                        String ruleName = webService +" "+type;
+
+                        String message = tokenToRawMsg.getOrDefault(transactionToken, "");
+                        String sourceInput = additionalData.optString(Constants.VALUE, "");
+                        String targetInput = additionalData.optString(Constants.ORIGINAL_VALUE, "");
+                        int matchCount = eachResponse.optInt(Constants.MATCHING_COUNT, 0);
+                        String feedbackStatus = eachResponse.optString(Constants.MATCHING_STATUS, "");
+                        String feedback = eachResponse.toString();
+                        if (feedback.length() > 32767) {
+                            feedback = "Value too large check feedback table";
+                        }
+                        String comments = "";
+                        if (Constants.FAIL.equals(testStatus)) {
+                            comments = failedDueToColumnMismatch ? Constants.COLUMN_MISMATCH_COMMENT : Constants.NO_MATCH_COMMENT;
+                        }
+
+                        ReportRow row = new ReportRow(0, ruleName, message, tagName, sourceInput, targetInput,
+                                targetColumnName, watchListType, uid, transactionToken, runSkey,
+                                matchCount, feedbackStatus, filteredCount, feedback, testStatus, comments);
+                        queue.add(row);
                     }
-                    String testStatus = truePositives > 0 ? Constants.PASS : Constants.FAIL;
-                    logger.info("Status for trxn toke {} : {}",transactionToken,testStatus);
-                    if (Constants.FAIL.equalsIgnoreCase(testStatus))
-                        logger.info("failedDueToColumnMismatch : {}",failedDueToColumnMismatch);
+
                 } catch (Exception e) {
                     logger.error("Error processing transactionToken {}: {}", transactionToken, e.getMessage(), e);
                 }
@@ -131,6 +182,82 @@ public class AnalyzerMain {
         } finally {
             executor.shutdown();
         }
+
+        List<ReportRow> reportRows = new ArrayList<>(queue);
+        reportRows.sort(Comparator.comparingLong(rr -> rr.osTransactionToken));
+        return reportRows;
+    }
+
+    private static void writeExcel(List<ReportRow> reportRows, String misDate, String runNo, String batchType, String matchHeader) throws IOException {
+        try (Workbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("Analysis");
+            String[] headers = {
+                    "SeqNo", "Rule Name", "Message ISO20022", "Tag", "Source Input", "Target Input",
+                    "Target Column", "Watchlist", "N_UID", "OS Transaction Token", "OS runSkey",
+                    "OS Match Count", "OS Feedback Status", matchHeader, "OS Feedback",
+                    "OS Test Status", "OS Comments"
+            };
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                headerRow.createCell(i).setCellValue(headers[i]);
+            }
+
+            int rowNum = 1;
+            for (ReportRow rr : reportRows) {
+                Row row = sheet.createRow(rowNum);
+                row.createCell(0).setCellValue(rowNum);
+                row.createCell(1).setCellValue(rr.ruleName);
+                row.createCell(2).setCellValue(rr.message);
+                row.createCell(3).setCellValue(rr.tag);
+                row.createCell(4).setCellValue(rr.sourceInput);
+                row.createCell(5).setCellValue(rr.targetInput);
+                row.createCell(6).setCellValue(rr.targetColumn);
+                row.createCell(7).setCellValue(rr.watchlist);
+                row.createCell(8).setCellValue(rr.nUid);
+                row.createCell(9).setCellValue(rr.osTransactionToken);
+                row.createCell(10).setCellValue(rr.osRunSkey);
+                row.createCell(11).setCellValue(rr.osMatchCount);
+                row.createCell(12).setCellValue(rr.osFeedbackStatus);
+                row.createCell(13).setCellValue(rr.osSpecificMatches);
+                row.createCell(14).setCellValue(rr.osFeedback);
+                row.createCell(15).setCellValue(rr.osTestStatus);
+                row.createCell(16).setCellValue(rr.osComments);
+                rowNum++;
+            }
+
+            String prefix;
+            if ("ISO20022".equalsIgnoreCase(batchType)) {
+                prefix = misDate + "_RUN" + runNo + "_STG_ANALYSIS_";
+            } else if ("NACHA".equalsIgnoreCase(batchType)) {
+                prefix = misDate + "_RUN" + runNo + "_ACH_ANALYSIS_";
+            } else {
+                throw new IllegalArgumentException("Invalid batchType");
+            }
+            String fileName = prefix + ".xlsx";
+            File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
+            try (FileOutputStream fos = new FileOutputStream(outputFile)) {
+                wb.write(fos);
+            }
+            logger.info("Excel report generated at: {}", outputFile.getAbsolutePath());
+        }
+    }
+
+    private static Map<Long, String> getTokenToRawMsg(Connection connection, String runSkey, String batchType) throws Exception {
+        Map<Long, String> map = new HashMap<>();
+        String tableName = batchType.equalsIgnoreCase("ISO20022") ? "FCC_TF_XML_BATCH_TRXN" : "FCC_TF_ACH_BATCH_TRXN"; // Assumed ACH table
+        String query = "SELECT N_GRP_MSG_ID, C_RAW_MSG FROM " + tableName + " WHERE N_RUN_SKEY = ?";
+        try (PreparedStatement pst = connection.prepareStatement(query)) {
+            pst.setLong(1, Long.parseLong(runSkey));
+            try (ResultSet rs = pst.executeQuery()) {
+                while (rs.next()) {
+                    map.put(rs.getLong("N_GRP_MSG_ID"), rs.getString("C_RAW_MSG"));
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error in getTokenToRawMsg: {}", e.getMessage(), e);
+            throw e;
+        }
+        return map;
     }
 
     private static Map<Long, JSONObject> getTokenToAdditionalDataMap(Connection connection, List<Long> transactionTokens, int msgCategory) throws Exception {
@@ -162,23 +289,6 @@ public class AnalyzerMain {
             }
         }
         return tokenToAdditionalDetails;
-    }
-
-    private static List<Long> getLisOfAllTransactions(Connection connection, String runSkey) throws Exception {
-        List<Long> tokens = new ArrayList<>();
-        String query = "SELECT N_GRP_MSG_ID FROM FCC_TF_XML_BATCH_TRXN WHERE N_RUN_SKEY = ?";
-        try (PreparedStatement pst = connection.prepareStatement(query)) {
-            pst.setLong(1, Long.parseLong(runSkey));
-            try (ResultSet rs = pst.executeQuery()) {
-                while (rs.next()) {
-                    tokens.add(rs.getLong("N_GRP_MSG_ID"));
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Error in getLisOfAllTransactions: {}", e.getMessage(), e);
-            throw e;
-        }
-        return tokens;
     }
 
     private static Map<Long, JSONObject> getBulkResponsesFromFeedbackTable(Connection connection, List<Long> transactionTokens, String msgCategory) throws Exception {
