@@ -35,9 +35,7 @@ public class AnalyzerMain {
         String msgCategoryString = batchType.equalsIgnoreCase("ISO20022")?"SEPA":"NACHA";
 
 
-        // Parallel processing of each trxn token
-        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
+
 
         List<Long> transactionTokens;
         Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap;
@@ -53,7 +51,16 @@ public class AnalyzerMain {
             throw e;
         }
 
+        analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, watchListType, webServiceId, tagName);
 
+    }
+
+    private static void analyzeResults(List<Long> transactionTokens, Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap,
+                                       Map<Long, JSONObject> feedbackMap, Map<Long, JSONObject> tokenToAdditionalDataMap,
+                                       String watchListType, String webServiceId, String tagName) {
+        // Parallel processing of each trxn token
+        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
         for (long transactionToken : transactionTokens) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
@@ -124,7 +131,6 @@ public class AnalyzerMain {
         } finally {
             executor.shutdown();
         }
-
     }
 
     private static Map<Long, JSONObject> getTokenToAdditionalDataMap(Connection connection, List<Long> transactionTokens, int msgCategory) throws Exception {
