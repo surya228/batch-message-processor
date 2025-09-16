@@ -51,8 +51,8 @@ public class AnalyzerMain {
         try (Connection connection = SQLUtility.getDbConnection()) {
             tokenToRawMsg = getTokenToRawMsg(connection, runSkey, batchType);
             transactionTokens = new ArrayList<>(tokenToRawMsg.keySet());
-            tokenToResponseIdToColumnNamesMap = getBulkColumnNameWLS(connection,transactionTokens,msgCategory);
             feedbackMap = getBulkResponsesFromFeedbackTable(connection,transactionTokens, msgCategoryString);
+            tokenToResponseIdToColumnNamesMap = getBulkColumnNameWLS(connection,transactionTokens,msgCategory);
             tokenToAdditionalDataMap = getTokenToAdditionalDataMap(connection,transactionTokens,msgCategory);
         } catch (Exception e) {
             logger.error("Error during database operations: {}", e.getMessage(), e);
@@ -275,8 +275,11 @@ public class AnalyzerMain {
             logger.error("Error in getTokenToRawMsg: {}", e.getMessage(), e);
             throw e;
         }
-        return map;
-    }
+        if (map.isEmpty()) {
+            throw new Exception("No data found in "+tableName+" for the runSkey: "+ runSkey);
+        }
+    return map;
+}
 
     private static Map<Long, JSONObject> getTokenToAdditionalDataMap(Connection connection, List<Long> transactionTokens, int msgCategory) throws Exception {
         Map<Long, JSONObject> tokenToAdditionalDetails = new HashMap<>();
@@ -328,6 +331,8 @@ public class AnalyzerMain {
                         String jsonString = rs.getString("C_FEEDBACK_MESSAGE");
                         if (jsonString != null && !jsonString.isEmpty()) {
                             feedbackMap.put(rs.getLong("N_TRAX_TOKEN"), new JSONObject(jsonString));
+                        } else {
+                            feedbackMap.put(rs.getLong("N_TRAX_TOKEN"), new JSONObject("No Feedback Found."));
                         }
                     }
                 }
