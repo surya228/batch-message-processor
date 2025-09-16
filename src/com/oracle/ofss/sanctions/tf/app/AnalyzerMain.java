@@ -42,28 +42,35 @@ public class AnalyzerMain {
         String misDate = props.getProperty(Constants.MIS_DATE);
         String runNo = props.getProperty(Constants.RUN_NO);
 
-        String matchHeader = "OS # " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " matches";
+        List<ReportRow> osReportRows = null;
+        List<ReportRow> otReportRows = null;
 
-        Map<Long, String> tokenToRawMsg;
-        List<Long> transactionTokens;
-        Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap;
-        Map<Long, JSONObject> feedbackMap;
-        Map<Long, JSONObject> tokenToAdditionalDataMap;
         try (Connection connection = SQLUtility.getDbConnection()) {
-            tokenToRawMsg = getTokenToRawMsg(connection, osRunSkey, batchType);
-            transactionTokens = new ArrayList<>(tokenToRawMsg.keySet());
-            feedbackMap = getBulkResponsesFromFeedbackTable(connection,transactionTokens, msgCategoryString);
-            tokenToResponseIdToColumnNamesMap = getBulkColumnNameWLS(connection,transactionTokens,msgCategory);
-            tokenToAdditionalDataMap = getTokenToAdditionalDataMap(connection,transactionTokens,msgCategory);
+            if (osRunSkey != null && !osRunSkey.isEmpty()) {
+                osReportRows = processForRunSkey(connection, osRunSkey, batchType, msgCategory, msgCategoryString, watchListType, webServiceId, webService, tagName);
+            }
+            if (otRunSkey != null && !otRunSkey.isEmpty()) {
+                otReportRows = processForRunSkey(connection, otRunSkey, batchType, msgCategory, msgCategoryString, watchListType, webServiceId, webService, tagName);
+            }
         } catch (Exception e) {
             logger.error("Error during database operations: {}", e.getMessage(), e);
             throw e;
         }
 
-        List<ReportRow> reportRows = analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, watchListType, webServiceId, webService, tagName, osRunSkey, tokenToRawMsg);
+        String matchHeader = (osReportRows != null) ? "# " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " matches" : null;
+//        String otMatchHeader = (otReportRows != null) ? "# " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " matches" : null;
 
-        writeExcel(reportRows, misDate, runNo, batchType, matchHeader);
+        writeExcel(osReportRows, otReportRows, misDate, runNo, batchType, matchHeader);
 
+    }
+
+    private static List<ReportRow> processForRunSkey(Connection connection, String runSkey, String batchType, int msgCategory, String msgCategoryString, String watchListType, String webServiceId, String webService, String tagName) throws Exception {
+        Map<Long, String> tokenToRawMsg = getTokenToRawMsg(connection, runSkey, batchType);
+        List<Long> transactionTokens = new ArrayList<>(tokenToRawMsg.keySet());
+        Map<Long, JSONObject> feedbackMap = getBulkResponsesFromFeedbackTable(connection,transactionTokens, msgCategoryString);
+        Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap = getBulkColumnNameWLS(connection,transactionTokens,msgCategory);
+        Map<Long, JSONObject> tokenToAdditionalDataMap = getTokenToAdditionalDataMap(connection,transactionTokens,msgCategory);
+        return analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, watchListType, webServiceId, webService, tagName, runSkey, tokenToRawMsg);
     }
 
     private static List<ReportRow> analyzeResults(List<Long> transactionTokens, Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap,
@@ -183,14 +190,12 @@ public class AnalyzerMain {
         }
 
         List<ReportRow> reportRows = new ArrayList<>(queue);
-        reportRows.sort(Comparator.comparingLong(rr -> rr.osTransactionToken));
+        reportRows.sort(Comparator.comparingLong(rr -> rr.transactionToken));
         return reportRows;
     }
 
-    private static void writeExcel(List<ReportRow> reportRows, String misDate, String runNo, String batchType, String matchHeader) throws IOException {
+    private static void writeExcel(List<ReportRow> osReportRows, List<ReportRow> otReportRows, String misDate, String runNo, String batchType, String matchHeader) throws IOException {
         try (Workbook wb = new XSSFWorkbook()) {
-            Sheet sheet = wb.createSheet("OS");
-
             Font boldFont = wb.createFont();
             boldFont.setBold(true);
 
@@ -204,45 +209,8 @@ public class AnalyzerMain {
             highlightRed.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             highlightRed.setFont(boldFont);
 
-            String[] headers = {
-                    "SeqNo", "Rule Name", "Message ISO20022", "Tag", "Source Input", "Target Input",
-                    "Target Column", "Watchlist", "N_UID", "OS Transaction Token", "OS RunSkey",
-                    "OS Match Count", "OS Feedback Status", matchHeader, "OS Feedback",
-                    "OS Test Status", "OS Comments", "Message Key"
-            };
-            Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < headers.length; i++) {
-                headerRow.createCell(i).setCellValue(headers[i]);
-            }
-
-            int rowNum = 1;
-            for (ReportRow rr : reportRows) {
-                Row row = sheet.createRow(rowNum);
-                row.createCell(0).setCellValue(rowNum);
-                row.createCell(1).setCellValue(rr.ruleName);
-                row.createCell(2).setCellValue(rr.message);
-                row.createCell(3).setCellValue(rr.tag);
-                row.createCell(4).setCellValue(rr.sourceInput);
-                row.createCell(5).setCellValue(rr.targetInput);
-                row.createCell(6).setCellValue(rr.targetColumn);
-                row.createCell(7).setCellValue(rr.watchlist);
-                row.createCell(8).setCellValue(rr.nUid);
-                row.createCell(9).setCellValue(rr.osTransactionToken);
-                row.createCell(10).setCellValue(rr.osRunSkey);
-                row.createCell(11).setCellValue(rr.osMatchCount);
-                row.createCell(12).setCellValue(rr.osFeedbackStatus);
-                row.createCell(13).setCellValue(rr.osSpecificMatches);
-                row.createCell(14).setCellValue(rr.osFeedback);
-                row.createCell(15).setCellValue(rr.osTestStatus);
-                if (Constants.PASS.equals(rr.osTestStatus)) {
-                    row.getCell(15).setCellStyle(highlightGreen);
-                } else if (Constants.FAIL.equals(rr.osTestStatus)) {
-                    row.getCell(15).setCellStyle(highlightRed);
-                }
-                row.createCell(16).setCellValue(rr.osComments);
-                row.createCell(17).setCellValue(rr.messageKey);
-                rowNum++;
-            }
+            createSheet(wb, "Open Search", osReportRows, matchHeader, highlightGreen, highlightRed);
+            createSheet(wb, "Oracle Text", otReportRows, matchHeader, highlightGreen, highlightRed);
 
             String prefix;
             if ("ISO20022".equalsIgnoreCase(batchType)) {
@@ -258,6 +226,52 @@ public class AnalyzerMain {
                 wb.write(fos);
             }
             logger.info("Excel report generated at: {}", outputFile.getAbsolutePath());
+        }
+    }
+
+    private static void createSheet(Workbook wb, String sheetName, List<ReportRow> reportRows, String matchHeader, CellStyle highlightGreen, CellStyle highlightRed) {
+        if (reportRows == null || reportRows.isEmpty()) return;
+
+        Sheet sheet = wb.createSheet(sheetName);
+
+        String[] headers = {
+                "SeqNo", "Rule Name", "Message ISO20022", "Tag", "Source Input", "Target Input",
+                "Target Column", "Watchlist", "N_UID", "Transaction Token", "RunSkey",
+                "Match Count", "Feedback Status", matchHeader, "Feedback",
+                "Test Status", "Comments", "Message Key"
+        };
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            headerRow.createCell(i).setCellValue(headers[i]);
+        }
+
+        int rowNum = 1;
+        for (ReportRow rr : reportRows) {
+            Row row = sheet.createRow(rowNum);
+            row.createCell(0).setCellValue(rowNum);
+            row.createCell(1).setCellValue(rr.ruleName);
+            row.createCell(2).setCellValue(rr.message);
+            row.createCell(3).setCellValue(rr.tag);
+            row.createCell(4).setCellValue(rr.sourceInput);
+            row.createCell(5).setCellValue(rr.targetInput);
+            row.createCell(6).setCellValue(rr.targetColumn);
+            row.createCell(7).setCellValue(rr.watchlist);
+            row.createCell(8).setCellValue(rr.nUid);
+            row.createCell(9).setCellValue(rr.transactionToken);
+            row.createCell(10).setCellValue(rr.runSkey);
+            row.createCell(11).setCellValue(rr.matchCount);
+            row.createCell(12).setCellValue(rr.feedbackStatus);
+            row.createCell(13).setCellValue(rr.specificMatches);
+            row.createCell(14).setCellValue(rr.feedback);
+            row.createCell(15).setCellValue(rr.testStatus);
+            if (Constants.PASS.equals(rr.testStatus)) {
+                row.getCell(15).setCellStyle(highlightGreen);
+            } else if (Constants.FAIL.equals(rr.testStatus)) {
+                row.getCell(15).setCellStyle(highlightRed);
+            }
+            row.createCell(16).setCellValue(rr.comments);
+            row.createCell(17).setCellValue(rr.messageKey);
+            rowNum++;
         }
     }
 

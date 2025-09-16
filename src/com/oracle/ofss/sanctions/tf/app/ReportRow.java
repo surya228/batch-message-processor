@@ -10,20 +10,20 @@ public class ReportRow {
     public String targetColumn;
     public String watchlist;
     public String nUid;
-    public long osTransactionToken;
-    public String osRunSkey;
-    public int osMatchCount;
-    public String osFeedbackStatus;
-    public int osSpecificMatches;
-    public String osFeedback;
-    public String osTestStatus;
-public String osComments;
-public String messageKey;
+    public long transactionToken;
+    public String runSkey;
+    public int matchCount;
+    public String feedbackStatus;
+    public int specificMatches;
+    public String feedback;
+    public String testStatus;
+    public String comments;
+    public String messageKey;
 
 public ReportRow(int seqNo, String ruleName, String message, String tag, String sourceInput, String targetInput,
-                     String targetColumn, String watchlist, String nUid, long osTransactionToken, String osRunSkey,
-                     int osMatchCount, String osFeedbackStatus, int osSpecificMatches, String osFeedback,
-                     String osTestStatus, String osComments, String messageKey) {
+                     String targetColumn, String watchlist, String nUid, long transactionToken, String runSkey,
+                     int matchCount, String feedbackStatus, int specificMatches, String feedback,
+                     String testStatus, String comments, String messageKey) {
         this.seqNo = seqNo;
         this.ruleName = ruleName;
         this.message = message;
@@ -33,14 +33,14 @@ public ReportRow(int seqNo, String ruleName, String message, String tag, String 
         this.targetColumn = targetColumn;
         this.watchlist = watchlist;
         this.nUid = nUid;
-        this.osTransactionToken = osTransactionToken;
-        this.osRunSkey = osRunSkey;
-        this.osMatchCount = osMatchCount;
-        this.osFeedbackStatus = osFeedbackStatus;
-        this.osSpecificMatches = osSpecificMatches;
-        this.osFeedback = osFeedback;
-        this.osTestStatus = osTestStatus;
-        this.osComments = osComments;
+        this.transactionToken = transactionToken;
+        this.runSkey = runSkey;
+        this.matchCount = matchCount;
+        this.feedbackStatus = feedbackStatus;
+        this.specificMatches = specificMatches;
+        this.feedback = feedback;
+        this.testStatus = testStatus;
+        this.comments = comments;
         this.messageKey = messageKey;
     }
 }
