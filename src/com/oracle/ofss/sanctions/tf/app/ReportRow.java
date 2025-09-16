@@ -17,12 +17,13 @@ public class ReportRow {
     public int osSpecificMatches;
     public String osFeedback;
     public String osTestStatus;
-    public String osComments;
+public String osComments;
+public String messageKey;
 
-    public ReportRow(int seqNo, String ruleName, String message, String tag, String sourceInput, String targetInput,
+public ReportRow(int seqNo, String ruleName, String message, String tag, String sourceInput, String targetInput,
                      String targetColumn, String watchlist, String nUid, long osTransactionToken, String osRunSkey,
                      int osMatchCount, String osFeedbackStatus, int osSpecificMatches, String osFeedback,
-                     String osTestStatus, String osComments) {
+                     String osTestStatus, String osComments, String messageKey) {
         this.seqNo = seqNo;
         this.ruleName = ruleName;
         this.message = message;
@@ -40,5 +41,6 @@ public class ReportRow {
         this.osFeedback = osFeedback;
         this.osTestStatus = osTestStatus;
         this.osComments = osComments;
+        this.messageKey = messageKey;
     }
 }

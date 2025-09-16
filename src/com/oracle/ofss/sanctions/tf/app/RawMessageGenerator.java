@@ -14,6 +14,8 @@ import java.nio.file.Path;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class RawMessageGenerator {
     private static final Logger logger = LoggerFactory.getLogger(RawMessageGenerator.class);
@@ -182,6 +184,9 @@ public class RawMessageGenerator {
         SourceInputModel temp;
         int updatedCount = 0;
 
+        LocalDateTime now = LocalDateTime.now();
+        String dateTimeStr = now.format(DateTimeFormatter.ofPattern("ddMMyyHHmmss"));
+
         List<Object[]> stopwords = null;
         Map<String, Map<String, String>> synonymMap = null;
 
@@ -223,19 +228,19 @@ public class RawMessageGenerator {
                                 String lookupIds = (String) info.get("lookupIds");
                                 String lookupValueIds = (String) info.get("lookupValueIds");
                                 temp = cloneSourceModel(sourceModel);
-                                updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, -2, uid, tagName, webserviceId, lookupIds, lookupValueIds);
+                                updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, -2, uid, tagName, webserviceId, lookupIds, lookupValueIds, dateTimeStr);
                             }
                         } else {
                             if (!isStopwordEnabled) {
                                 // 0 ced -> exact
                                 temp = cloneSourceModel(sourceModel);
-                                updatedCount = createRawMsg(temp, toBeReplaced, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 0, uid, tagName, webserviceId, "NA", "NA");
+                                updatedCount = createRawMsg(temp, toBeReplaced, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 0, uid, tagName, webserviceId, "NA", "NA", dateTimeStr);
 
                                 if (props.getProperty(Constants.CED1).equalsIgnoreCase(Constants.YES)) { // 1 ced
                                     List<String> oneCedList = generate1CedVariants(toBeReplaced);
                                     for (String value : oneCedList) {
                                         temp = cloneSourceModel(sourceModel);
-                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 1, uid, tagName, webserviceId, "NA", "NA");
+                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 1, uid, tagName, webserviceId, "NA", "NA", dateTimeStr);
                                     }
                                 }
 
@@ -243,7 +248,7 @@ public class RawMessageGenerator {
                                     List<String> twoCedList = generate2CedVariants(toBeReplaced);
                                     for (String value : twoCedList) {
                                         temp = cloneSourceModel(sourceModel);
-                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 2, uid, tagName, webserviceId, "NA", "NA");
+                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 2, uid, tagName, webserviceId, "NA", "NA", dateTimeStr);
                                     }
                                 }
 
@@ -251,7 +256,7 @@ public class RawMessageGenerator {
                                     List<String> threeCedList = generate3CedVariants(toBeReplaced);
                                     for (String value : threeCedList) {
                                         temp = cloneSourceModel(sourceModel);
-                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 3, uid, tagName, webserviceId, "NA", "NA");
+                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 3, uid, tagName, webserviceId, "NA", "NA", dateTimeStr);
                                     }
                                 }
                             }
@@ -265,7 +270,7 @@ public class RawMessageGenerator {
                                     List<String> variants = generateStopwordVariants(toBeReplaced, stop);
                                     for (String variant : variants) {
                                         temp = cloneSourceModel(sourceModel);
-                                        updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, -1, uid, tagName, webserviceId, lookupId, lookupValueId);
+                                        updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, -1, uid, tagName, webserviceId, lookupId, lookupValueId, dateTimeStr);
                                     }
                                 }
                             }
@@ -291,10 +296,10 @@ public class RawMessageGenerator {
         );
     }
 
-    public static int createRawMsg(SourceInputModel temp, String value, String identifierToBeReplaced,
+public static int createRawMsg(SourceInputModel temp, String value, String identifierToBeReplaced,
                                    String token, String targetColumn, String identifierToken,
                                    String tableName, List<SourceInputModel> rawMessages, int updatedCount, String originalValue, int ced, String uid,
-                                   String tagName, String webserviceId, String lookupIds, String lookupValueIds){
+                                   String tagName, String webserviceId, String lookupIds, String lookupValueIds, String dateTimeStr){
         if (value != null) {
             logger.info("toBeReplaced: {} originalValue: {}  token: {}  column: {}  identifier: {} ced: {}", value, originalValue, token, targetColumn, identifierToBeReplaced, ced);
             identifierToBeReplaced = Constants.IDEN_PREFIX + identifierToBeReplaced;
@@ -320,6 +325,9 @@ public class RawMessageGenerator {
             additionalData.put("isSynonymPresent", (ced == -2 ? "Y" : "N"));
             additionalData.put(Constants.LOOKUP_ID, lookupIds);
             additionalData.put(Constants.LOOKUP_VALUE_ID, lookupValueIds);
+
+            String messageKey = dateTimeStr + (updatedCount + 1);
+            additionalData.put("MessageKey", messageKey);
 
             rawMessages.add(temp);
 

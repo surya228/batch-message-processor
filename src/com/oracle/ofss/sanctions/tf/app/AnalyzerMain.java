@@ -41,7 +41,7 @@ public class AnalyzerMain {
         String misDate = props.getProperty(Constants.MIS_DATE);
         String runNo = props.getProperty(Constants.RUN_NO);
 
-String matchHeader = "OS # " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " matches";
+        String matchHeader = "OS # " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " matches";
 
         Map<Long, String> tokenToRawMsg;
         List<Long> transactionTokens;
@@ -161,7 +161,7 @@ String matchHeader = "OS # " + Constants.getMatchHeaderSuffix(webServiceId, watc
 
                         ReportRow row = new ReportRow(0, ruleName, message, tagName, sourceInput, targetInput,
                                 targetColumnName, watchListType, uid, transactionToken, runSkey,
-                                matchCount, feedbackStatus, filteredCount, feedback, testStatus, comments);
+                                matchCount, feedbackStatus, filteredCount, feedback, testStatus, comments, additionalData.optString("MessageKey", ""));
                         queue.add(row);
                     }
 
@@ -205,9 +205,9 @@ String matchHeader = "OS # " + Constants.getMatchHeaderSuffix(webServiceId, watc
 
             String[] headers = {
                     "SeqNo", "Rule Name", "Message ISO20022", "Tag", "Source Input", "Target Input",
-                    "Target Column", "Watchlist", "N_UID", "OS Transaction Token", "OS runSkey",
+                    "Target Column", "Watchlist", "N_UID", "OS Transaction Token", "OS RunSkey",
                     "OS Match Count", "OS Feedback Status", matchHeader, "OS Feedback",
-                    "OS Test Status", "OS Comments"
+                    "OS Test Status", "OS Comments", "Message Key"
             };
             Row headerRow = sheet.createRow(0);
             for (int i = 0; i < headers.length; i++) {
@@ -239,6 +239,7 @@ String matchHeader = "OS # " + Constants.getMatchHeaderSuffix(webServiceId, watc
                     row.getCell(15).setCellStyle(highlightRed);
                 }
                 row.createCell(16).setCellValue(rr.osComments);
+                row.createCell(17).setCellValue(rr.messageKey);
                 rowNum++;
             }
 
