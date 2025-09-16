@@ -32,7 +32,8 @@ public class AnalyzerMain {
         String webServiceId = props.getProperty(Constants.WEBSERVICE_ID);
         String webService = props.getProperty(Constants.WEBSERVICE);
         String tagName = props.getProperty(Constants.TAGNAME);
-        String runSkey = props.getProperty(Constants.RUN_SKEY);
+        String osRunSkey = props.getProperty(Constants.OS_RUN_SKEY);
+        String otRunSkey = props.getProperty(Constants.OT_RUN_SKEY);
         String batchType = props.getProperty(Constants.BATCH_TYPE);
 
         int msgCategory = batchType.equalsIgnoreCase("ISO20022")?3:4;
@@ -49,7 +50,7 @@ public class AnalyzerMain {
         Map<Long, JSONObject> feedbackMap;
         Map<Long, JSONObject> tokenToAdditionalDataMap;
         try (Connection connection = SQLUtility.getDbConnection()) {
-            tokenToRawMsg = getTokenToRawMsg(connection, runSkey, batchType);
+            tokenToRawMsg = getTokenToRawMsg(connection, osRunSkey, batchType);
             transactionTokens = new ArrayList<>(tokenToRawMsg.keySet());
             feedbackMap = getBulkResponsesFromFeedbackTable(connection,transactionTokens, msgCategoryString);
             tokenToResponseIdToColumnNamesMap = getBulkColumnNameWLS(connection,transactionTokens,msgCategory);
@@ -59,7 +60,7 @@ public class AnalyzerMain {
             throw e;
         }
 
-        List<ReportRow> reportRows = analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, watchListType, webServiceId, webService, tagName, runSkey, tokenToRawMsg);
+        List<ReportRow> reportRows = analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, watchListType, webServiceId, webService, tagName, osRunSkey, tokenToRawMsg);
 
         writeExcel(reportRows, misDate, runNo, batchType, matchHeader);
 
@@ -188,7 +189,7 @@ public class AnalyzerMain {
 
     private static void writeExcel(List<ReportRow> reportRows, String misDate, String runNo, String batchType, String matchHeader) throws IOException {
         try (Workbook wb = new XSSFWorkbook()) {
-            Sheet sheet = wb.createSheet("Analysis");
+            Sheet sheet = wb.createSheet("OS");
 
             Font boldFont = wb.createFont();
             boldFont.setBold(true);

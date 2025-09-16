@@ -52,7 +52,8 @@ public class Constants {
     public static String RUN_NO = "runNo";
     public static String TAGNAME = "tagName";
     public static String WEBSERVICE = "webService";
-    public static String RUN_SKEY = "runSkey";
+    public static String OS_RUN_SKEY = "openSearch.runSkey";
+    public static String OT_RUN_SKEY = "oracleText.runSkey";
     public static String EXACT = "Exact";
     public static String FUZZY = "Fuzzy - ";
     public static String WATCHLIST_TYPE = "watchListType";
