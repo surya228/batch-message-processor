@@ -11,20 +11,15 @@ import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Properties;
-import java.util.Scanner;
 
 public class RawMessageGeneratorMain {
     private static final Logger logger = LoggerFactory.getLogger(RawMessageGeneratorMain.class);
 
     public static void main(String[] args) throws Exception {
+        long startTime = System.currentTimeMillis();
         logger.info("=============================================================");
         logger.info("               RAW MESSAGE GENERATOR STARTED                 ");
         logger.info("=============================================================");
-        Date startDateObj = new Date();
-        SimpleDateFormat dateFormat = new SimpleDateFormat(Constants.DATE_SUFFIX_FORMAT);
-        SimpleDateFormat timeFormat = new SimpleDateFormat(Constants.TIME_SUFFIX_FORMAT);
-        String startDate = dateFormat.format(startDateObj);
-        String startTimeStr = timeFormat.format(startDateObj);
 
         Properties props = loadProperties();
 
@@ -47,25 +42,18 @@ public class RawMessageGeneratorMain {
 
         saveConfigProperties(props);
 
-        String renamePrefix = props.getProperty(Constants.WEBSERVICE) + "_";
-
-        long startTime = System.currentTimeMillis();
-
-        boolean isToggle = Constants.YES.equalsIgnoreCase(props.getProperty(Constants.TOGGLE_MATCHING_ENGINE));
-
         // grenerate raw message
         int generatedCount = RawMessageGenerator.generateRawMessage(null, props); // Generation is always sequential
         if (generatedCount == 0) {
             logger.info("No raw messages generated. Exiting utility.");
             System.exit(0);
         }
-        logger.info("Raw Message Generator Completed");
 
         if (generatedCount > 0) {
             // Calculate file count based on row limit
             int rowLimit = Constants.DEFAULT_ROW_LIMIT;
             try {
-                String rowLimitStr = props.getProperty(Constants.EXCEL_SPLIT_ROW_LIMIT, String.valueOf(Constants.DEFAULT_ROW_LIMIT));
+                String rowLimitStr = props.getProperty(Constants.JSON_OBJJECT_LIMIT, String.valueOf(Constants.DEFAULT_ROW_LIMIT));
                 rowLimit = Integer.parseInt(rowLimitStr);
             } catch (NumberFormatException e) {
                 logger.error("Invalid row limit value, using default: {}", Constants.DEFAULT_ROW_LIMIT);
@@ -77,8 +65,7 @@ public class RawMessageGeneratorMain {
         logger.info("=============================================================");
         logger.info("               RAW MESSAGE GENERATOR ENDED                 ");
         logger.info("=============================================================");
-        long endTime = System.currentTimeMillis();
-        logger.info("Total time taken by utility: {} Seconds ", (endTime - startTime) / 1000L );
+        logger.info("Total time taken by utility: {} Seconds ", (System.currentTimeMillis() - startTime) / 1000L );
     }
 
     /**

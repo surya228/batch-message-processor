@@ -47,8 +47,8 @@ public class Constants {
     public static final String TOGGLE_MATCHING_ENGINE = "toggleMatchingEngine";
 
     // Property Keys for Configuration
-    public static String BATCH_TYPE = "batchtype";
-    public static String MIS_DATE = "misdate";
+    public static String BATCH_TYPE = "batchType";
+    public static String MIS_DATE = "misDate";
     public static String RUN_NO = "runNo";
     public static String TAGNAME = "tagName";
     public static String WEBSERVICE = "webService";
@@ -127,7 +127,7 @@ public class Constants {
     public static File OUTPUT_FOLDER = new File(PARENT_DIRECTORY, OUTPUT_FOLDER_NAME);
 
     // Excel splitting configuration
-    public static String EXCEL_SPLIT_ROW_LIMIT = "excel.split.rowLimit";
+    public static String JSON_OBJJECT_LIMIT = "jsonObjectLimit";
     public static int DEFAULT_ROW_LIMIT = 1000;
     public static String OUTPUT_FILE_NAME_PATTERN = OUTPUT_FILE_NAME+"_%d";
     public static String FILE_NAME_LIST = "filename.txt";
@@ -166,22 +166,7 @@ public class Constants {
     public static final int DEFAULT_RETRY_MAX = 5;
     public static final long DEFAULT_REFRESH_INTERVAL_MIN = 30;
     public static final long THREAD_SLEEP_MS = 5000;
-    public static final String CONTENT_TYPE_JSON = "application/json";
-    public static final String AUTH_BEARER_PREFIX = "Bearer ";
-    public static final int SUCCESS_CODE = 200;
-    public static final int BAD_GATEWAY = 502;
-    public static final int GATEWAY_TIMEOUT = 504;
-    public static final int SERVICE_UNAVAILABLE = 503;
-    public static final int NO_CONTENT = 204;
-    public static final String GRANT_TYPE = "client_credentials";
-    public static final String SCOPE = "urn:opc:idm:__myscopes__";
     public static final String MATCHES = "matches";
     public static final String MATCHED_WATCHLIST_ID = "matchedWatchlistId";
     public static final String RESPONSE_ID = "responseID";
-
-    // Concurrency constants
-    public static final String PROCESSOR_THREADS = "processor_thread_count";
-    public static final String ANALYZER_THREADS = "analyzer_thread_count";
-    public static final String POISON_PILL = "POISON_PILL";
-    public static final int DEFAULT_THREAD_COUNT = 2;
 }

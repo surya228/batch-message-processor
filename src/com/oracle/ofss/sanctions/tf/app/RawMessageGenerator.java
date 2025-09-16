@@ -1,16 +1,10 @@
 package com.oracle.ofss.sanctions.tf.app;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.SerializableString;
+import com.fasterxml.jackson.core.io.CharacterEscapes;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.opencsv.CSVWriter;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.json.JSONArray;
-import org.json.JSONObject;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,13 +17,35 @@ import java.util.concurrent.BlockingQueue;
 
 public class RawMessageGenerator {
     private static final Logger logger = LoggerFactory.getLogger(RawMessageGenerator.class);
+
+    private static class CustomEscapes extends CharacterEscapes {
+        private final int[] asciiEscapes;
+
+        public CustomEscapes() {
+            asciiEscapes = CharacterEscapes.standardAsciiEscapesForJSON();
+            asciiEscapes['\n'] = CharacterEscapes.ESCAPE_NONE;
+            asciiEscapes['\r'] = CharacterEscapes.ESCAPE_NONE;
+            asciiEscapes['\t'] = CharacterEscapes.ESCAPE_NONE;
+        }
+
+        @Override
+        public int[] getEscapeCodesForAscii() {
+            return asciiEscapes;
+        }
+
+        @Override
+        public SerializableString getEscapeSequence(int ch) {
+            return null;
+        }
+    }
+
     public static int generateRawMessage(BlockingQueue<File> queue, Properties props) throws Exception {
         long startTime = System.currentTimeMillis();
         logger.info("=============================================================");
         logger.info("                RAW MESSAGE GENERATOR STARTED                ");
         logger.info("=============================================================");
         Connection connection = null;
-        JSONArray rawMessageJsonArray = null;
+        List<SourceInputModel> rawMessages = null;
         ResultSet rs = null;
 
         try {
@@ -50,8 +66,8 @@ public class RawMessageGenerator {
                 throw new Exception(e);
             }
 
-            String srcFile = loadJsonFromFile(Constants.SOURCE_FILE_PATH);
-            logger.info("srcFile: {}", srcFile);
+            SourceInputModel sourceModel = loadJsonFromFile(Constants.SOURCE_FILE_PATH);
+            logger.info("Loaded source model");
 
 
             connection = SQLUtility.getDbConnection();
@@ -59,10 +75,10 @@ public class RawMessageGenerator {
 
 
 
-            rawMessageJsonArray = generateRawMessageJsonArray(rs,props,srcFile,tableName,tagName,webserviceId,watchlistType,isStopwordEnabled,isSynonymEnabled);
+            rawMessages = generateRawMessageJsonArray(rs, props, sourceModel, tableName, tagName, webserviceId, watchlistType, isStopwordEnabled, isSynonymEnabled);
 
-            if(rawMessageJsonArray.length()>0){
-                writeRawMessagesToJsonFile(rawMessageJsonArray, props);
+            if (!rawMessages.isEmpty()) {
+                writeRawMessagesToJsonFile(rawMessages, props);
             }
 
             logger.info("=============================================================");
@@ -88,7 +104,7 @@ public class RawMessageGenerator {
                 }
             }
         }
-        return rawMessageJsonArray != null ? rawMessageJsonArray.length() : 0;
+        return rawMessages != null ? rawMessages.size() : 0;
     }
 
     private static boolean validateConfigProperties(String watchlistType, String webserviceId, boolean isStopwordEnabled, boolean isSynonymEnabled) throws Exception {
@@ -160,10 +176,10 @@ public class RawMessageGenerator {
         return rs;
     }
 
-    public static JSONArray generateRawMessageJsonArray(ResultSet rs, Properties props, String srcFile, String tableName, String tagName, String webserviceId, String watchlistType, boolean isStopwordEnabled, boolean isSynonymEnabled) throws Exception {
-        JSONArray jsonArray = new JSONArray();
+    public static List<SourceInputModel> generateRawMessageJsonArray(ResultSet rs, Properties props, SourceInputModel sourceModel, String tableName, String tagName, String webserviceId, String watchlistType, boolean isStopwordEnabled, boolean isSynonymEnabled) throws Exception {
+        List<SourceInputModel> rawMessages = new ArrayList<>();
         int maxIndex = getMaxIndex(props, Constants.REPLACE_SRC);
-        String temp;
+        SourceInputModel temp;
         int updatedCount = 0;
 
         List<Object[]> stopwords = null;
@@ -183,8 +199,7 @@ public class RawMessageGenerator {
 
         int cnt=0;
         while(rs.next()) {
-            temp=srcFile;
-            if(temp != null) {
+            if (sourceModel != null) {
                 for (int i = 1; i <= maxIndex; i++) {
                     String srcKey = Constants.REPLACE_SRC+"[" + i + "]";
                     String targetColumnKey = Constants.REPLACE_TARGET_COLUMN+"[" + i + "]";
@@ -207,35 +222,36 @@ public class RawMessageGenerator {
                                 String variant = (String) info.get("variant");
                                 String lookupIds = (String) info.get("lookupIds");
                                 String lookupValueIds = (String) info.get("lookupValueIds");
-                                temp = srcFile;
-                                updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, jsonArray, updatedCount, tokenValue, -2, uid, tagName, webserviceId, lookupIds, lookupValueIds);
+                                temp = cloneSourceModel(sourceModel);
+                                updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, -2, uid, tagName, webserviceId, lookupIds, lookupValueIds);
                             }
                         } else {
                             if (!isStopwordEnabled) {
                                 // 0 ced -> exact
-                                updatedCount = createRawMsg(temp, toBeReplaced, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, jsonArray, updatedCount, tokenValue, 0, uid, tagName, webserviceId, "NA", "NA");
+                                temp = cloneSourceModel(sourceModel);
+                                updatedCount = createRawMsg(temp, toBeReplaced, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 0, uid, tagName, webserviceId, "NA", "NA");
 
                                 if (props.getProperty(Constants.CED1).equalsIgnoreCase(Constants.YES)) { // 1 ced
                                     List<String> oneCedList = generate1CedVariants(toBeReplaced);
                                     for (String value : oneCedList) {
-                                        temp = srcFile;
-                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, jsonArray, updatedCount, tokenValue, 1, uid, tagName, webserviceId, "NA", "NA");
+                                        temp = cloneSourceModel(sourceModel);
+                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 1, uid, tagName, webserviceId, "NA", "NA");
                                     }
                                 }
 
                                 if (props.getProperty(Constants.CED2).equalsIgnoreCase(Constants.YES)) { // 2 ced
                                     List<String> twoCedList = generate2CedVariants(toBeReplaced);
                                     for (String value : twoCedList) {
-                                        temp = srcFile;
-                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, jsonArray, updatedCount, tokenValue, 2, uid, tagName, webserviceId, "NA", "NA");
+                                        temp = cloneSourceModel(sourceModel);
+                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 2, uid, tagName, webserviceId, "NA", "NA");
                                     }
                                 }
 
                                 if (props.getProperty(Constants.CED3).equalsIgnoreCase(Constants.YES)) { // 3 ced
                                     List<String> threeCedList = generate3CedVariants(toBeReplaced);
                                     for (String value : threeCedList) {
-                                        temp = srcFile;
-                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, jsonArray, updatedCount, tokenValue, 3, uid, tagName, webserviceId, "NA", "NA");
+                                        temp = cloneSourceModel(sourceModel);
+                                        updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, 3, uid, tagName, webserviceId, "NA", "NA");
                                     }
                                 }
                             }
@@ -248,8 +264,8 @@ public class RawMessageGenerator {
                                     String lookupValueId = (String) pair[2];
                                     List<String> variants = generateStopwordVariants(toBeReplaced, stop);
                                     for (String variant : variants) {
-                                        String variantTemp = srcFile;
-                                        updatedCount = createRawMsg(variantTemp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, jsonArray, updatedCount, tokenValue, -1, uid, tagName, webserviceId, lookupId, lookupValueId);
+                                        temp = cloneSourceModel(sourceModel);
+                                        updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, tableName, rawMessages, updatedCount, tokenValue, -1, uid, tagName, webserviceId, lookupId, lookupValueId);
                                     }
                                 }
                             }
@@ -261,38 +277,51 @@ public class RawMessageGenerator {
         }
         logger.info("No. of rows selected from Watchlist:: {}", cnt);
         logger.info("No. of raw message created by Generator:: {}", updatedCount);
-        return jsonArray;
+        return rawMessages;
 
     }
 
-    public static int createRawMsg(String temp, String value, String identifierToBeReplaced,
+    private static SourceInputModel cloneSourceModel(SourceInputModel original) {
+        return new SourceInputModel(
+                original.getRawMessage(),
+                original.getBusinessDomainCode(),
+                original.getJurisdictionCode(),
+                original.getMessageDirection(),
+                new HashMap<>(original.getAdditionalData())
+        );
+    }
+
+    public static int createRawMsg(SourceInputModel temp, String value, String identifierToBeReplaced,
                                    String token, String targetColumn, String identifierToken,
-                                   String tableName, JSONArray jsonArray, int updatedCount, String originalValue, int ced, String uid,
+                                   String tableName, List<SourceInputModel> rawMessages, int updatedCount, String originalValue, int ced, String uid,
                                    String tagName, String webserviceId, String lookupIds, String lookupValueIds){
         if (value != null) {
             logger.info("toBeReplaced: {} originalValue: {}  token: {}  column: {}  identifier: {} ced: {}", value, originalValue, token, targetColumn, identifierToBeReplaced, ced);
-            identifierToBeReplaced = Constants.IDEN_PREFIX+identifierToBeReplaced;
-            temp = temp.replace(token, value);
-            temp = temp.replace(identifierToken,identifierToBeReplaced);
+            identifierToBeReplaced = Constants.IDEN_PREFIX + identifierToBeReplaced;
 
-            JSONObject tempJson = new JSONObject(temp);
-            JSONObject additionalData = tempJson.getJSONObject(Constants.ADDITIONAL_DATA);
+            String raw = temp.getRawMessage();
+            raw = raw.replace(token, value);
+            raw = raw.replace(identifierToken, identifierToBeReplaced);
+            temp.setRawMessage(raw);
+
+            Map<String, Object> additionalData = temp.getAdditionalData();
             additionalData.put(Constants.TABLE, tableName);
-            additionalData.put(Constants.UID,uid);
+            additionalData.put(Constants.UID, uid);
             additionalData.put(Constants.COLUMN, targetColumn);
             additionalData.put(Constants.TOKEN, token);
             additionalData.put(Constants.VALUE, value);
             additionalData.put(Constants.ORIGINAL_VALUE, originalValue);
             additionalData.put(Constants.CED, ced);
-            additionalData.put(Constants.TAGNAME,tagName);
-            additionalData.put(Constants.WEBSERVICE_ID,webserviceId);
+            additionalData.put(Constants.TAGNAME, tagName);
+            additionalData.put(Constants.WEBSERVICE_ID, webserviceId);
             additionalData.put(Constants.IDEN_TOKEN, identifierToken);
             additionalData.put(Constants.IDEN_VALUE, identifierToBeReplaced);
             additionalData.put(Constants.IS_STOPWORD_PRESENT, (ced == -1 ? "Y" : "N"));
             additionalData.put("isSynonymPresent", (ced == -2 ? "Y" : "N"));
             additionalData.put(Constants.LOOKUP_ID, lookupIds);
             additionalData.put(Constants.LOOKUP_VALUE_ID, lookupValueIds);
-            jsonArray.put(tempJson);
+
+            rawMessages.add(temp);
 
             updatedCount++;
         }
@@ -590,7 +619,7 @@ public class RawMessageGenerator {
         return maxIndex;
     }
 
-    public static String loadJsonFromFile(String filePath) {
+    public static SourceInputModel loadJsonFromFile(String filePath) {
         try {
             File file = new File(filePath);
 
@@ -604,13 +633,7 @@ public class RawMessageGenerator {
             String jsonContent = Files.readString(Path.of(file.getPath()));
             ObjectMapper objectMapper = new ObjectMapper();
             objectMapper.enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature());
-            SourceInputModel sourceInputModel = objectMapper.readValue(jsonContent, SourceInputModel.class);
-
-            // Parse the JSON data using JSONObject
-            JSONObject jsonObject = new JSONObject(sourceInputModel);
-
-            // Convert the parsed JSON back to a string
-            return jsonObject.toString(4);
+            return objectMapper.readValue(jsonContent, SourceInputModel.class);
         } catch (Exception e) {
             logger.info("An error occurred while reading the file: {}", e.getMessage());
             e.printStackTrace();
@@ -618,14 +641,14 @@ public class RawMessageGenerator {
         }
     }
 
-    public static void writeRawMessagesToJsonFile(JSONArray jsonArray, Properties props) throws IOException {
+    public static void writeRawMessagesToJsonFile(List<SourceInputModel> rawMessages, Properties props) throws IOException {
         if (!Constants.OUTPUT_FOLDER.exists()) {
             Constants.OUTPUT_FOLDER.mkdirs();
         }
 
-        int rowLimit = Constants.DEFAULT_ROW_LIMIT;
+        int rowLimit;
         try {
-            String rowLimitStr = props.getProperty(Constants.EXCEL_SPLIT_ROW_LIMIT, String.valueOf(Constants.DEFAULT_ROW_LIMIT));
+            String rowLimitStr = props.getProperty(Constants.JSON_OBJJECT_LIMIT, String.valueOf(Constants.DEFAULT_ROW_LIMIT));
             rowLimit = Integer.parseInt(rowLimitStr);
         } catch (NumberFormatException e) {
             logger.error("Invalid row limit value for JSON splitting, using default: {}", Constants.DEFAULT_ROW_LIMIT);
@@ -650,31 +673,27 @@ public class RawMessageGenerator {
         }
 
         List<String> fileList = new ArrayList<>();
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+        mapper.getFactory().setCharacterEscapes(new CustomEscapes());
 
-        if (jsonArray.length() <= rowLimit) {
+        if (rawMessages.size() <= rowLimit) {
             // Write to a single file if splitting is not enabled or data is within limit
             String fileName = prefix + "1" + Constants.JSON_EXT;
             File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
-            try (FileOutputStream fos = new FileOutputStream(outputFile)) {
-                fos.write(jsonArray.toString(4).getBytes(Constants.ENCODER));
-            }
+            mapper.writeValue(outputFile, rawMessages);
             fileList.add(shortPrefix + "1");
             logger.info("Successfully wrote raw messages to JSON file: {}", fileName);
         } else {
             // Split data into multiple files
             int fileIndex = 1;
             int startIndex = 0;
-            while (startIndex < jsonArray.length()) {
-                int endIndex = Math.min(startIndex + rowLimit, jsonArray.length());
-                JSONArray chunk = new JSONArray();
-                for (int i = startIndex; i < endIndex; i++) {
-                    chunk.put(jsonArray.getJSONObject(i));
-                }
+            while (startIndex < rawMessages.size()) {
+                int endIndex = Math.min(startIndex + rowLimit, rawMessages.size());
+                List<SourceInputModel> chunk = rawMessages.subList(startIndex, endIndex);
                 String fileName = prefix + fileIndex + Constants.JSON_EXT;
                 File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
-                try (FileOutputStream fos = new FileOutputStream(outputFile)) {
-                    fos.write(chunk.toString(4).getBytes(Constants.ENCODER));
-                }
+                mapper.writeValue(outputFile, chunk);
                 fileList.add(shortPrefix + fileIndex);
                 logger.info("Successfully wrote raw messages to JSON file: {}", fileName);
                 fileIndex++;

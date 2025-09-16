@@ -2,7 +2,7 @@ package com.oracle.ofss.sanctions.tf.app;
 
 
 
-import java.util.HashMap;
+import java.util.Map;
 
 public class SourceInputModel {
 	
@@ -10,13 +10,13 @@ public class SourceInputModel {
     private String businessDomainCode;
     private String jurisdictionCode;
     private String messageDirection;
-    private HashMap<String, String> additionalData;
+    private Map<String, Object> additionalData;
     
 	public SourceInputModel() {
 		super();
 	}
 
-	public SourceInputModel(String rawMessage, String businessDomainCode, String jurisdictionCode, String messageDirection, HashMap<String, String> additionalData) {
+	public SourceInputModel(String rawMessage, String businessDomainCode, String jurisdictionCode, String messageDirection, Map<String, Object> additionalData) {
 		super();
 		this.rawMessage = rawMessage;
 		this.businessDomainCode = businessDomainCode;
@@ -49,10 +49,10 @@ public class SourceInputModel {
 	public void setMessageDirection(String messageDirection) {
 		this.messageDirection = messageDirection;
 	}
-	public HashMap<String, String> getAdditionalData() {
+	public Map<String, Object> getAdditionalData() {
 		return additionalData;
 	}
-	public void setAdditionalData(HashMap<String, String> additionalData) {
+	public void setAdditionalData(Map<String, Object> additionalData) {
 		this.additionalData = additionalData;
 	}
 
