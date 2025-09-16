@@ -1,5 +1,6 @@
 package com.oracle.ofss.sanctions.tf.app;
 
+import org.apache.poi.ss.usermodel.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -19,9 +20,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class AnalyzerMain {
@@ -191,6 +189,20 @@ String matchHeader = "OS # " + Constants.getMatchHeaderSuffix(webServiceId, watc
     private static void writeExcel(List<ReportRow> reportRows, String misDate, String runNo, String batchType, String matchHeader) throws IOException {
         try (Workbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet("Analysis");
+
+            Font boldFont = wb.createFont();
+            boldFont.setBold(true);
+
+            CellStyle highlightGreen = wb.createCellStyle();
+            highlightGreen.setFillForegroundColor(IndexedColors.BRIGHT_GREEN.getIndex());
+            highlightGreen.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            highlightGreen.setFont(boldFont);
+
+            CellStyle highlightRed = wb.createCellStyle();
+            highlightRed.setFillForegroundColor(IndexedColors.RED.getIndex());
+            highlightRed.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            highlightRed.setFont(boldFont);
+
             String[] headers = {
                     "SeqNo", "Rule Name", "Message ISO20022", "Tag", "Source Input", "Target Input",
                     "Target Column", "Watchlist", "N_UID", "OS Transaction Token", "OS runSkey",
@@ -221,6 +233,11 @@ String matchHeader = "OS # " + Constants.getMatchHeaderSuffix(webServiceId, watc
                 row.createCell(13).setCellValue(rr.osSpecificMatches);
                 row.createCell(14).setCellValue(rr.osFeedback);
                 row.createCell(15).setCellValue(rr.osTestStatus);
+                if (Constants.PASS.equals(rr.osTestStatus)) {
+                    row.getCell(15).setCellStyle(highlightGreen);
+                } else if (Constants.FAIL.equals(rr.osTestStatus)) {
+                    row.getCell(15).setCellStyle(highlightRed);
+                }
                 row.createCell(16).setCellValue(rr.osComments);
                 rowNum++;
             }
