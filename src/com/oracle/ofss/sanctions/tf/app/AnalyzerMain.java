@@ -84,7 +84,7 @@ public class AnalyzerMain {
                        "FROM " + batchTable + " b " +
                        "LEFT JOIN fcc_tf_feedback f ON b.N_GRP_MSG_ID = f.N_TRAX_TOKEN AND f.V_MSG_CATEGORY = ? " +
                        "LEFT JOIN " + rawDataTable + " r ON b.N_GRP_MSG_ID = r.N_GRP_MSG_ID " +
-                       "WHERE b.N_RUN_SKEY = ? and b.N_GRP_MSG_ID between 225 and 244";
+                       "WHERE b.N_RUN_SKEY = ? ";
 
         Map<Long, String> tokenToRawMsg = new HashMap<>();
         Map<Long, JSONObject> feedbackMap = new HashMap<>();
