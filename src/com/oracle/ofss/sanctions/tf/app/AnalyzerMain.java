@@ -21,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 
 public class AnalyzerMain {
     private static Logger logger = LoggerFactory.getLogger(AnalyzerMain.class);
@@ -70,17 +71,75 @@ public class AnalyzerMain {
     }
 
     private static List<ReportRow> processForRunSkey(Connection connection, String runSkey, String batchType, int msgCategory, String msgCategoryString, String watchListType, String webServiceId, String webService, String tagName) throws Exception {
-        Map<Long, String> tokenToRawMsg = getTokenToRawMsg(connection, runSkey, batchType);
+        long startTime = System.currentTimeMillis();
+
+        String batchTable = batchType.equalsIgnoreCase("ISO20022") ? "FCC_TF_XML_BATCH_TRXN" : "FCC_TF_ACH_BATCH_TRXN";
+        String rawDataTable = msgCategory == 3 ? "fcc_tf_xml_raw_data" : "fcc_tf_ach_raw_data";
+
+        String query = "SELECT " +
+                       "b.N_GRP_MSG_ID, " +
+                       "b.C_RAW_MSG, " +
+                       "f.C_FEEDBACK_MESSAGE, " +
+                       "r.C_ADDITIONAL_DATA " +
+                       "FROM " + batchTable + " b " +
+                       "LEFT JOIN fcc_tf_feedback f ON b.N_GRP_MSG_ID = f.N_TRAX_TOKEN AND f.V_MSG_CATEGORY = ? " +
+                       "LEFT JOIN " + rawDataTable + " r ON b.N_GRP_MSG_ID = r.N_GRP_MSG_ID " +
+                       "WHERE b.N_RUN_SKEY = ? and b.N_GRP_MSG_ID between 225 and 244";
+
+        Map<Long, String> tokenToRawMsg = new HashMap<>();
+        Map<Long, JSONObject> feedbackMap = new HashMap<>();
+        Map<Long, JSONObject> tokenToAdditionalDataMap = new HashMap<>();
+
+        try (PreparedStatement pst = connection.prepareStatement(query)) {
+            pst.setFetchSize(1000);
+            pst.setString(1, msgCategoryString);
+            pst.setLong(2, Long.parseLong(runSkey));
+            try (ResultSet rs = pst.executeQuery()) {
+                while (rs.next()) {
+                    long token = rs.getLong("N_GRP_MSG_ID");
+
+                    // Raw Msg
+                    if (!tokenToRawMsg.containsKey(token)) {
+                        tokenToRawMsg.put(token, rs.getString("C_RAW_MSG"));
+                    }
+
+                    // Feedback
+                    String feedbackJson = rs.getString("C_FEEDBACK_MESSAGE");
+                    if (feedbackJson != null && !feedbackJson.isEmpty()) {
+                        feedbackMap.put(token, new JSONObject(feedbackJson));
+                    } else if (!feedbackMap.containsKey(token)) {
+                        feedbackMap.put(token, new JSONObject("No Feedback Found."));
+                    }
+
+                    // Additional Data
+                    String additionalJson = rs.getString("C_ADDITIONAL_DATA");
+                    if (additionalJson != null && !additionalJson.isEmpty() && !tokenToAdditionalDataMap.containsKey(token)) {
+                        tokenToAdditionalDataMap.put(token, new JSONObject(additionalJson));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error in combined data fetch: {}", e.getMessage(), e);
+            throw e;
+        }
+
         List<Long> transactionTokens = new ArrayList<>(tokenToRawMsg.keySet());
-        Map<Long, JSONObject> feedbackMap = getBulkResponsesFromFeedbackTable(connection,transactionTokens, msgCategoryString);
-        Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap = getBulkColumnNameWLS(connection,transactionTokens,msgCategory);
-        Map<Long, JSONObject> tokenToAdditionalDataMap = getTokenToAdditionalDataMap(connection,transactionTokens,msgCategory);
+
+        if (transactionTokens.isEmpty()) {
+            throw new Exception("No data found for runSkey: " + runSkey);
+        }
+
+        Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap = getBulkColumnNameWLS(connection, transactionTokens, msgCategory);
+
+        long dbEndTime = System.currentTimeMillis();
+        logger.info("DB queries took: {} ms", (dbEndTime - startTime));
         return analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, watchListType, webServiceId, webService, tagName, runSkey, tokenToRawMsg);
     }
 
     private static List<ReportRow> analyzeResults(List<Long> transactionTokens, Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap,
                                                   Map<Long, JSONObject> feedbackMap, Map<Long, JSONObject> tokenToAdditionalDataMap,
                                                   String watchListType, String webServiceId, String webService, String tagName, String runSkey, Map<Long, String> tokenToRawMsg) {
+        long startTime = System.currentTimeMillis();
         // Parallel processing of each trxn token
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<CompletableFuture<Void>> futures = new ArrayList<>();
@@ -199,11 +258,14 @@ public class AnalyzerMain {
 
         List<ReportRow> reportRows = new ArrayList<>(queue);
 //        reportRows.sort(Comparator.comparingLong(rr -> rr.transactionToken));
+        long endTime = System.currentTimeMillis();
+        logger.info("Analysis processing took: {} ms", (endTime - startTime));
         return reportRows;
     }
 
     private static void writeSplitExcel(List<ReportRow> reportRows, String misDate, String runNo, String batchType, String matchHeader, String type, int rowLimit) throws IOException {
         if (reportRows == null || reportRows.isEmpty()) return;
+        long startTime = System.currentTimeMillis();
 
         String prefix;
         if ("ISO20022".equalsIgnoreCase(batchType)) {
@@ -222,7 +284,7 @@ public class AnalyzerMain {
 
             String fileName = (fileCount > 1) ? prefix + "_" + (i + 1) + Constants.XLSX_EXT : prefix + Constants.XLSX_EXT;
 
-            try (Workbook wb = new XSSFWorkbook()) {
+            try (SXSSFWorkbook wb = new SXSSFWorkbook(100)) { // Streaming workbook, keep 100 rows in memory
                 Sheet sheet = wb.createSheet(type);
 
                 Font boldFont = wb.createFont();
@@ -310,90 +372,8 @@ public class AnalyzerMain {
                 logger.info("Excel report generated at: {}", outputFile.getAbsolutePath());
             }
         }
-    }
-
-    private static Map<Long, String> getTokenToRawMsg(Connection connection, String runSkey, String batchType) throws Exception {
-        Map<Long, String> map = new HashMap<>();
-        String tableName = batchType.equalsIgnoreCase("ISO20022") ? "FCC_TF_XML_BATCH_TRXN" : "FCC_TF_ACH_BATCH_TRXN"; // Assumed ACH table
-        String query = "SELECT N_GRP_MSG_ID, C_RAW_MSG FROM " + tableName + " WHERE N_RUN_SKEY = ? AND n_grp_msg_id between 225 and 244";
-        try (PreparedStatement pst = connection.prepareStatement(query)) {
-            pst.setLong(1, Long.parseLong(runSkey));
-            try (ResultSet rs = pst.executeQuery()) {
-                while (rs.next()) {
-                    map.put(rs.getLong("N_GRP_MSG_ID"), rs.getString("C_RAW_MSG"));
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Error in getTokenToRawMsg: {}", e.getMessage(), e);
-            throw e;
-        }
-        if (map.isEmpty()) {
-            throw new Exception("No data found in "+tableName+" for the runSkey: "+ runSkey);
-        }
-        return map;
-    }
-
-    private static Map<Long, JSONObject> getTokenToAdditionalDataMap(Connection connection, List<Long> transactionTokens, int msgCategory) throws Exception {
-        Map<Long, JSONObject> tokenToAdditionalDetails = new HashMap<>();
-        if (transactionTokens.isEmpty()) return tokenToAdditionalDetails;
-
-        String tableName = msgCategory==3?"fcc_tf_xml_raw_data":"fcc_tf_ach_raw_data";
-        // Batch in chunks to avoid IN clause limits
-        int batchSize = 1000;
-        for (int i = 0; i < transactionTokens.size(); i += batchSize) {
-            List<Long> batch = transactionTokens.subList(i, Math.min(i + batchSize, transactionTokens.size()));
-            String placeholders = String.join(",", Collections.nCopies(batch.size(), "?"));
-            String query = "select N_GRP_MSG_ID, C_ADDITIONAL_DATA from "+tableName+" where n_grp_msg_id in (" + placeholders + ")";
-            try (PreparedStatement pst = connection.prepareStatement(query)) {
-                for (int j = 0; j < batch.size(); j++) {
-                    pst.setLong(j + 1, batch.get(j));
-                }
-                try (ResultSet rs = pst.executeQuery()) {
-                    while (rs.next()) {
-                        String jsonString = rs.getString("C_ADDITIONAL_DATA");
-                        if (jsonString != null && !jsonString.isEmpty()) {
-                            tokenToAdditionalDetails.put(rs.getLong("N_GRP_MSG_ID"), new JSONObject(jsonString));
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                logger.error("Error in getTokenToAdditionalDataMap for batch starting at index {}: {}", i, e.getMessage(), e);
-                throw e;
-            }
-        }
-        return tokenToAdditionalDetails;
-    }
-
-    private static Map<Long, JSONObject> getBulkResponsesFromFeedbackTable(Connection connection, List<Long> transactionTokens, String msgCategory) throws Exception {
-        Map<Long, JSONObject> feedbackMap = new HashMap<>();
-        if (transactionTokens.isEmpty()) return feedbackMap;
-        // Batch in chunks to avoid IN clause limits
-        int batchSize = 1000;
-        for (int i = 0; i < transactionTokens.size(); i += batchSize) {
-            List<Long> batch = transactionTokens.subList(i, Math.min(i + batchSize, transactionTokens.size()));
-            String placeholders = String.join(",", Collections.nCopies(batch.size(), "?"));
-            String query = "SELECT N_TRAX_TOKEN, C_FEEDBACK_MESSAGE FROM fcc_tf_feedback WHERE N_TRAX_TOKEN IN (" + placeholders + ") AND V_MSG_CATEGORY = ?";
-            try (PreparedStatement pst = connection.prepareStatement(query)) {
-                for (int j = 0; j < batch.size(); j++) {
-                    pst.setLong(j + 1, batch.get(j));
-                }
-                pst.setString(batch.size() + 1, msgCategory);
-                try (ResultSet rs = pst.executeQuery()) {
-                    while (rs.next()) {
-                        String jsonString = rs.getString("C_FEEDBACK_MESSAGE");
-                        if (jsonString != null && !jsonString.isEmpty()) {
-                            feedbackMap.put(rs.getLong("N_TRAX_TOKEN"), new JSONObject(jsonString));
-                        } else {
-                            feedbackMap.put(rs.getLong("N_TRAX_TOKEN"), new JSONObject("No Feedback Found."));
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                logger.error("Error in getBulkResponsesFromFeedbackTable for batch starting at index {}: {}", i, e.getMessage(), e);
-                throw e;
-            }
-        }
-        return feedbackMap;
+        long endTime = System.currentTimeMillis();
+        logger.info("Excel writing took: {} ms", (endTime - startTime));
     }
 
     private static Map<Long, Map<Long, String>> getBulkColumnNameWLS(Connection connection, List<Long> transactionTokens, int msgCategory) throws Exception {
@@ -406,6 +386,7 @@ public class AnalyzerMain {
             String placeholders = String.join(",", Collections.nCopies(batch.size(), "?"));
             String query = "SELECT N_GRP_MSG_ID, N_RESPONSE_ID, V_COLUMN_NAME FROM fcc_tf_rt_wls_response WHERE n_grp_msg_id IN (" + placeholders + ") AND n_msg_category = ?";
             try (PreparedStatement pst = connection.prepareStatement(query)) {
+                pst.setFetchSize(1000);
                 for (int j = 0; j < batch.size(); j++) {
                     pst.setLong(j + 1, batch.get(j));
                 }
@@ -425,6 +406,7 @@ public class AnalyzerMain {
         }
         return tokenToColumnMap;
     }
+
     private static Properties loadProperties() throws IOException {
         Properties props = new Properties();
         try (FileReader reader = new FileReader(Constants.CONFIG_FILE_PATH)) {
