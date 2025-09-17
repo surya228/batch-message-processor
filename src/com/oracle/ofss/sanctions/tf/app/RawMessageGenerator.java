@@ -185,7 +185,7 @@ public class RawMessageGenerator {
         int updatedCount = 0;
 
         LocalDateTime now = LocalDateTime.now();
-        String dateTimeStr = now.format(DateTimeFormatter.ofPattern("ddMMyyHHmmss"));
+        String dateTimeStr = now.format(DateTimeFormatter.ofPattern(Constants.DATE_TIME_FORMAT));
 
         List<Object[]> stopwords = null;
         Map<String, Map<String, String>> synonymMap = null;
@@ -296,7 +296,7 @@ public class RawMessageGenerator {
         );
     }
 
-public static int createRawMsg(SourceInputModel temp, String value, String identifierToBeReplaced,
+    public static int createRawMsg(SourceInputModel temp, String value, String identifierToBeReplaced,
                                    String token, String targetColumn, String identifierToken,
                                    String tableName, List<SourceInputModel> rawMessages, int updatedCount, String originalValue, int ced, String uid,
                                    String tagName, String webserviceId, String lookupIds, String lookupValueIds, String dateTimeStr){

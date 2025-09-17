@@ -74,8 +74,8 @@ public class AnalyzerMain {
     }
 
     private static List<ReportRow> analyzeResults(List<Long> transactionTokens, Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap,
-                                       Map<Long, JSONObject> feedbackMap, Map<Long, JSONObject> tokenToAdditionalDataMap,
-                                       String watchListType, String webServiceId, String webService, String tagName, String runSkey, Map<Long, String> tokenToRawMsg) {
+                                                  Map<Long, JSONObject> feedbackMap, Map<Long, JSONObject> tokenToAdditionalDataMap,
+                                                  String watchListType, String webServiceId, String webService, String tagName, String runSkey, Map<Long, String> tokenToRawMsg) {
         // Parallel processing of each trxn token
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<CompletableFuture<Void>> futures = new ArrayList<>();
@@ -209,8 +209,8 @@ public class AnalyzerMain {
             highlightRed.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             highlightRed.setFont(boldFont);
 
-            createSheet(wb, "Open Search", osReportRows, matchHeader, highlightGreen, highlightRed);
-            createSheet(wb, "Oracle Text", otReportRows, matchHeader, highlightGreen, highlightRed);
+            createSheet(wb, Constants.OS_SHEET_NAME, osReportRows, matchHeader, highlightGreen, highlightRed);
+            createSheet(wb, Constants.OT_SHEET_NAME, otReportRows, matchHeader, highlightGreen, highlightRed);
 
             String prefix;
             if ("ISO20022".equalsIgnoreCase(batchType)) {
@@ -220,7 +220,7 @@ public class AnalyzerMain {
             } else {
                 throw new IllegalArgumentException("Invalid batchType");
             }
-            String fileName = prefix + ".xlsx";
+            String fileName = prefix + Constants.XLSX_EXT;
             File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
             try (FileOutputStream fos = new FileOutputStream(outputFile)) {
                 wb.write(fos);
@@ -235,10 +235,24 @@ public class AnalyzerMain {
         Sheet sheet = wb.createSheet(sheetName);
 
         String[] headers = {
-                "SeqNo", "Rule Name", "Message ISO20022", "Tag", "Source Input", "Target Input",
-                "Target Column", "Watchlist", "N_UID", "Transaction Token", "RunSkey",
-                "Match Count", "Feedback Status", matchHeader, "Feedback",
-                "Test Status", "Comments", "Message Key"
+                Constants.SEQ_NO,
+                Constants.RULE,
+                Constants.MESSAGE,
+                Constants.TAG,
+                Constants.SOURCE_INPUT,
+                Constants.TARGET_INPUT,
+                Constants.TARGET_COLUMN,
+                Constants.WATCHLIST,
+                Constants.NUID,
+                Constants.TRXN_TOKEN,
+                Constants.RUN_SKEY,
+                Constants.MATCH_COUNT,
+                Constants.FEEDBACK_STATUS,
+                matchHeader,
+                Constants.FEEDBACK,
+                Constants.TEST_STATUS,
+                Constants.COMMENTS,
+                Constants.MESSAGE_KEY
         };
         Row headerRow = sheet.createRow(0);
         for (int i = 0; i < headers.length; i++) {
@@ -293,8 +307,8 @@ public class AnalyzerMain {
         if (map.isEmpty()) {
             throw new Exception("No data found in "+tableName+" for the runSkey: "+ runSkey);
         }
-    return map;
-}
+        return map;
+    }
 
     private static Map<Long, JSONObject> getTokenToAdditionalDataMap(Connection connection, List<Long> transactionTokens, int msgCategory) throws Exception {
         Map<Long, JSONObject> tokenToAdditionalDetails = new HashMap<>();

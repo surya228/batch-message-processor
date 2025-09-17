@@ -27,10 +27,10 @@ public class SQLUtility {
         String tnsAdminPath = Constants.PARENT_DIRECTORY+ File.separator+Constants.BIN_FOLDER_NAME+File.separator+walletname;
 
         Properties properties = new Properties();
-        properties.setProperty("oracle.net.tns_admin", tnsAdminPath);
+        properties.setProperty(Constants.TNS_ADMIN, tnsAdminPath);
         Class.forName(jdbcDriver);
         Connection connection = DriverManager.getConnection(jdbcUrl,properties);
-        logger.info("Connection established successfully!");
+        logger.info(Constants.CONNECTION_ESTABLISHED);
         return connection;
     }
 }

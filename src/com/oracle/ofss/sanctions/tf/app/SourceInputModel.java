@@ -5,13 +5,13 @@ package com.oracle.ofss.sanctions.tf.app;
 import java.util.Map;
 
 public class SourceInputModel {
-	
-    private String rawMessage;
-    private String businessDomainCode;
-    private String jurisdictionCode;
-    private String messageDirection;
-    private Map<String, Object> additionalData;
-    
+
+	private String rawMessage;
+	private String businessDomainCode;
+	private String jurisdictionCode;
+	private String messageDirection;
+	private Map<String, Object> additionalData;
+
 	public SourceInputModel() {
 		super();
 	}
@@ -24,7 +24,7 @@ public class SourceInputModel {
 		this.messageDirection = messageDirection;
 		this.additionalData = additionalData;
 	}
-	
+
 	public String getRawMessage() {
 		return rawMessage;
 	}

@@ -43,53 +43,38 @@ public class Constants {
     // Encoding Configuration
     public static String ENCODER = "UTF-8";
 
-    // Module Configuration Flags
-    public static final String TOGGLE_MATCHING_ENGINE = "toggleMatchingEngine";
-
     // Property Keys for Configuration
     public static String BATCH_TYPE = "batchType";
     public static String MIS_DATE = "misDate";
     public static String RUN_NO = "runNo";
     public static String TAGNAME = "tagName";
     public static String WEBSERVICE = "webService";
-    public static String OS_RUN_SKEY = "openSearch.runSkey";
-    public static String OT_RUN_SKEY = "oracleText.runSkey";
+    public static String OS_RUN_SKEY = "analyzer.openSearch.runSkey";
+    public static String OT_RUN_SKEY = "analyzer.oracleText.runSkey";
     public static String EXACT = "Exact";
     public static String FUZZY = "Fuzzy - ";
     public static String WATCHLIST_TYPE = "watchListType";
-    public static String TRANSACTION_SERVICE = "msgPosting.transactionService";
-    public static String TOKEN_URL = "msgPosting.tokenUrl";
-    public static String CLIENT_ID = "msgPosting.client.id";
-    public static String CLIENT_SECRET = "msgPosting.client.secret";
-    public static String DEVCORP7 = "msgPosting.devcorp7";
-    public static String NAMESPACE = "msgPosting.namespace";
-    public static String RETRY_REQUIRED_FLAG = "msgPosting.retryRequiredFlag";
-    public static String RETRY_MAX_COUNT = "msgPosting.retryMaxCount";
-    public static String RETRY_REFRESH_INTERVAL = "msgPosting.bearerTokenRefreshInterval";
-    public static String RESTART_FLAG = "msgPosting.restartFlag";
-    public static String POSTING_ENDPOINT = "-transaction-service/sync/process";
-    public static String TRANSACTION_TOKEN = "transactionToken";
-    public static String FEEDBACK_DATA = "feedbackData";
     public static String MATCHING_STATUS = "status";
     public static String MATCHING_COUNT = "matchCount";
     public static String WEBSERVICE_ID = "webServiceId";
-    public static final String COMMENTS = "Comments";
+
 
     // CED properties
     public static String CED1 =  "ced1";
     public static String CED2 =  "ced2";
     public static String CED3 =  "ced3";
 
-    // Database properties
+    // Database
     public static String JDBC_URL =  "jdbcurl";
     public static String JDBC_DRIVER =  "jdbcdriver";
     public static String WALLET_NAME =  "walletName";
     public static String WHERE_CLAUSE =  "whereClause";
     public static String REPLACE_SRC =  "replace.src";
     public static String REPLACE_TARGET_COLUMN =  "replace.targetColumn";
+    public static String CONNECTION_ESTABLISHED =  "Connection established successfully!";
+    public static String TNS_ADMIN =  "oracle.net.tns_admin";
 
     // JSON keys
-    public static String ADDITIONAL_DATA =  "additionalData";
     public static String TABLE =  "table";
     public static String UID =  "uid";
     public static String COLUMN =  "column";
@@ -105,21 +90,11 @@ public class Constants {
     public static String LOOKUP_VALUE_ID = "lookupValueId";
 
     // Date formats
-    public static String DATE_FORMAT =  "yyyy-MM-dd HH:mm:ss.SSS";
-    public static String DATE_SUFFIX_FORMAT = "ddMMyy";
-    public static String TIME_SUFFIX_FORMAT = "HHmmss";
-
-    // Messages
-    public static String WAIT_MSG =  "Wait for a while...It's gonna finish";
-    public static String HOLD_ON_MSG_1 =  "Hold on...It's almost completed";
-    public static String HOLD_ON_MSG_2 =  "Looking for Tortoise...Will find it soon";
-    public static String SUCCESS_MSG =  "Heyy...Here it is";
-    public static String LOAD_MSG =  "zzzz...on the way";
+    public static String DATE_TIME_FORMAT = "ddMMyyHHmmss";
 
     // File names and paths
     public static String SOURCE_FILE_NAME = "source";
     public static String CONFIG_FILE_NAME = "config";
-    public static String OUTPUT_FILE_NAME = "executing";
     public static String OUTPUT_FOLDER_NAME = "out";
     public static String BIN_FOLDER_NAME = "bin";
     public static String CURRENT_DIRECTORY = System.getProperty("user.dir");
@@ -131,7 +106,6 @@ public class Constants {
     // Excel splitting configuration
     public static String JSON_OBJJECT_LIMIT = "jsonObjectLimit";
     public static int DEFAULT_ROW_LIMIT = 1000;
-    public static String OUTPUT_FILE_NAME_PATTERN = OUTPUT_FILE_NAME+"_%d";
     public static String FILE_NAME_LIST = "filename.txt";
 
     // Status strings
@@ -151,10 +125,15 @@ public class Constants {
     public static String WATCHLIST = "Watchlist";
     public static String NUID = "N_UID";
     public static String TRXN_TOKEN = "Transaction Token";
+    public static String RUN_SKEY = "Run Skey";
     public static String MATCH_COUNT = "Match Count";
-    public static String STATUS = "Status";
     public static String FEEDBACK_STATUS = "Feedback Status";
+    public static String FEEDBACK = "Feedback";
     public static String TEST_STATUS = "Test Status";
+    public static final String COMMENTS = "Comments";
+    public static final String MESSAGE_KEY = "Message Key";
+    public static final String OS_SHEET_NAME = "Open Search";
+    public static final String OT_SHEET_NAME = "Oracle Text";
 
     // Comments
     public static final String COLUMN_MISMATCH_COMMENT = "Column name didn't match";
@@ -164,15 +143,11 @@ public class Constants {
     public static final String DEFAULT_CONFIG_BASE = "config";
     public static final String XLSX_EXT = ".xlsx";
     public static final String JSON_EXT = ".json";
-    public static final int MIN_ARGS = 6;
-    public static final int DEFAULT_RETRY_MAX = 5;
-    public static final long DEFAULT_REFRESH_INTERVAL_MIN = 30;
-    public static final long THREAD_SLEEP_MS = 5000;
     public static final String MATCHES = "matches";
     public static final String MATCHED_WATCHLIST_ID = "matchedWatchlistId";
     public static final String RESPONSE_ID = "responseID";
 
-public static String getMatchHeaderSuffix(String webServiceId, String watchlistType) {
+    public static String getMatchHeaderSuffix(String webServiceId, String watchlistType) {
         if (webServiceId.equals("3")) {
             if (watchlistType.equalsIgnoreCase("COUNTRY")) {
                 return "Country";
