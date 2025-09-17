@@ -33,8 +33,19 @@ public class SQLUtility {
             config.setJdbcUrl(jdbcUrl);
             config.setDriverClassName(jdbcDriver);
             config.addDataSourceProperty(Constants.TNS_ADMIN, tnsAdminPath);
-            config.setMaximumPoolSize(10); // Adjust based on needs
-            config.setMinimumIdle(5);
+
+            // Optimized connection pool settings for bulk operations
+            config.setMaximumPoolSize(20); // Increased for better throughput
+            config.setMinimumIdle(10);
+            config.setConnectionTimeout(60000); // 60 seconds
+            config.setIdleTimeout(300000); // 5 minutes
+            config.setMaxLifetime(1800000); // 30 minutes
+            config.setLeakDetectionThreshold(60000); // 60 seconds
+
+            // Performance optimizations
+            config.addDataSourceProperty("oracle.jdbc.ReadTimeout", "60000");
+            config.addDataSourceProperty("oracle.net.CONNECT_TIMEOUT", "10000");
+            config.addDataSourceProperty("oracle.jdbc.defaultNChar", "true");
 
             dataSource = new HikariDataSource(config);
         } catch (Exception e) {

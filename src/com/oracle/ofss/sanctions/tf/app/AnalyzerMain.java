@@ -91,7 +91,7 @@ public class AnalyzerMain {
         Map<Long, JSONObject> tokenToAdditionalDataMap = new HashMap<>();
 
         try (PreparedStatement pst = connection.prepareStatement(query)) {
-            pst.setFetchSize(1000);
+            pst.setFetchSize(5000); // Increased fetch size for better performance
             pst.setString(1, msgCategoryString);
             pst.setLong(2, Long.parseLong(runSkey));
             try (ResultSet rs = pst.executeQuery()) {
@@ -386,7 +386,7 @@ public class AnalyzerMain {
             String placeholders = String.join(",", Collections.nCopies(batch.size(), "?"));
             String query = "SELECT N_GRP_MSG_ID, N_RESPONSE_ID, V_COLUMN_NAME FROM fcc_tf_rt_wls_response WHERE n_grp_msg_id IN (" + placeholders + ") AND n_msg_category = ?";
             try (PreparedStatement pst = connection.prepareStatement(query)) {
-                pst.setFetchSize(1000);
+                pst.setFetchSize(5000); // Increased fetch size for better performance
                 for (int j = 0; j < batch.size(); j++) {
                     pst.setLong(j + 1, batch.get(j));
                 }
