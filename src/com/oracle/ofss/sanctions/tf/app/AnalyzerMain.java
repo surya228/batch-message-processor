@@ -145,7 +145,7 @@ public class AnalyzerMain {
                         }
                         String testStatus = truePositives > 0 || isColumnMismatch? Constants.PASS : Constants.FAIL;
 
-                        logger.info("Status for trxn toke {} : {}",transactionToken,testStatus);
+                        logger.info("Status for trxn token {} : {}",transactionToken,testStatus);
                         if (Constants.FAIL.equalsIgnoreCase(testStatus))
                             logger.info("isColumnMismatch : {}",isColumnMismatch);
 
@@ -169,9 +169,11 @@ public class AnalyzerMain {
                             feedback = "Value too large check feedback table";
                         }
                         String comments = "";
-                        if (Constants.FAIL.equals(testStatus)) {
-                            comments = isColumnMismatch ? Constants.COLUMN_MISMATCH_COMMENT : Constants.NO_MATCH_COMMENT;
-                        }
+                        if(Constants.PASS.equalsIgnoreCase(testStatus)){
+                            if(isColumnMismatch) comments = Constants.COLUMN_MISMATCH_COMMENT;
+                        } else comments = Constants.NO_MATCH_COMMENT;
+
+
 
                         ReportRow row = new ReportRow(0, ruleName, message, tagName, sourceInput, targetInput,
                                 targetColumnName, watchListType, uid, transactionToken, runSkey,
@@ -196,7 +198,7 @@ public class AnalyzerMain {
         }
 
         List<ReportRow> reportRows = new ArrayList<>(queue);
-        reportRows.sort(Comparator.comparingLong(rr -> rr.transactionToken));
+//        reportRows.sort(Comparator.comparingLong(rr -> rr.transactionToken));
         return reportRows;
     }
 
@@ -286,13 +288,13 @@ public class AnalyzerMain {
                     row.createCell(14).setCellValue(rr.feedback);
                     row.createCell(15).setCellValue(rr.testStatus);
 
-                    if (Constants.PASS.equals(rr.testStatus)) {
+                    if (Constants.PASS.equalsIgnoreCase(rr.testStatus)) {
                         if (rr.isColumnMismatch) {
                             row.getCell(15).setCellStyle(highlightYellow);
                         } else {
                             row.getCell(15).setCellStyle(highlightGreen);
                         }
-                    } else if (Constants.FAIL.equals(rr.testStatus)) {
+                    } else  {
                         row.getCell(15).setCellStyle(highlightRed);
                     }
 
@@ -313,7 +315,7 @@ public class AnalyzerMain {
     private static Map<Long, String> getTokenToRawMsg(Connection connection, String runSkey, String batchType) throws Exception {
         Map<Long, String> map = new HashMap<>();
         String tableName = batchType.equalsIgnoreCase("ISO20022") ? "FCC_TF_XML_BATCH_TRXN" : "FCC_TF_ACH_BATCH_TRXN"; // Assumed ACH table
-        String query = "SELECT N_GRP_MSG_ID, C_RAW_MSG FROM " + tableName + " WHERE N_RUN_SKEY = ?";
+        String query = "SELECT N_GRP_MSG_ID, C_RAW_MSG FROM " + tableName + " WHERE N_RUN_SKEY = ? AND n_grp_msg_id between 225 and 244";
         try (PreparedStatement pst = connection.prepareStatement(query)) {
             pst.setLong(1, Long.parseLong(runSkey));
             try (ResultSet rs = pst.executeQuery()) {
