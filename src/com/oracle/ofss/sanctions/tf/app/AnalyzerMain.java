@@ -86,6 +86,7 @@ public class AnalyzerMain {
                        "LEFT JOIN " + rawDataTable + " r ON b.N_GRP_MSG_ID = r.N_GRP_MSG_ID " +
                        "WHERE b.N_RUN_SKEY = ? ";
 
+        Set<Long> allTokens = new HashSet<>();
         Map<Long, String> tokenToRawMsg = new HashMap<>();
         Map<Long, JSONObject> feedbackMap = new HashMap<>();
         Map<Long, JSONObject> tokenToAdditionalDataMap = new HashMap<>();
@@ -98,23 +99,36 @@ public class AnalyzerMain {
                 while (rs.next()) {
                     long token = rs.getLong("N_GRP_MSG_ID");
 
-                    // Raw Msg
+                    // Collect all unique tokens
+                    allTokens.add(token);
+
+                    // Raw Msg - store even if null, will be handled as empty string
                     if (!tokenToRawMsg.containsKey(token)) {
-                        tokenToRawMsg.put(token, rs.getString("C_RAW_MSG"));
+                        String rawMsg = rs.getString("C_RAW_MSG");
+                        tokenToRawMsg.put(token, rawMsg != null ? rawMsg : "");
+                        if (rawMsg == null) {
+                            logger.debug("Token {} has null raw message, stored as empty string", token);
+                        }
                     }
 
-                    // Feedback
+                    // Feedback - always store feedback data
                     String feedbackJson = rs.getString("C_FEEDBACK_MESSAGE");
                     if (feedbackJson != null && !feedbackJson.isEmpty()) {
                         feedbackMap.put(token, new JSONObject(feedbackJson));
-                    } else if (!feedbackMap.containsKey(token)) {
-                        feedbackMap.put(token, new JSONObject("No Feedback Found."));
+                    } else {
+                        // Always ensure feedback data exists
+                        feedbackMap.put(token, new JSONObject("{\"message\": \"No feedback found\", \"matches\": []}"));
+                        logger.debug("Token {} has no feedback data, stored default feedback", token);
                     }
 
                     // Additional Data
                     String additionalJson = rs.getString("C_ADDITIONAL_DATA");
                     if (additionalJson != null && !additionalJson.isEmpty() && !tokenToAdditionalDataMap.containsKey(token)) {
                         tokenToAdditionalDataMap.put(token, new JSONObject(additionalJson));
+                    } else if (!tokenToAdditionalDataMap.containsKey(token)) {
+                        // Initialize empty additional data if not present
+                        tokenToAdditionalDataMap.put(token, new JSONObject());
+                        logger.debug("Token {} has no additional data, initialized empty object", token);
                     }
                 }
             }
@@ -123,7 +137,7 @@ public class AnalyzerMain {
             throw e;
         }
 
-        List<Long> transactionTokens = new ArrayList<>(tokenToRawMsg.keySet());
+        List<Long> transactionTokens = new ArrayList<>(allTokens);
 
         if (transactionTokens.isEmpty()) {
             throw new Exception("No data found for runSkey: " + runSkey);
@@ -147,30 +161,64 @@ public class AnalyzerMain {
         for (long transactionToken : transactionTokens) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
+                    // Always process every token - no early returns
                     JSONObject eachResponse = feedbackMap.get(transactionToken);
-                    if (eachResponse == null || !eachResponse.has(Constants.MATCHES)) return;
-
-                    JSONArray matches = eachResponse.getJSONArray(Constants.MATCHES);
-                    int truePositives = 0;
-                    String targetColumnName;
-                    String uid="";
-                    boolean valueNotPresentFlag = false;
-
                     JSONObject additionalData = tokenToAdditionalDataMap.get(transactionToken);
-                    if(additionalData.has(Constants.UID) && additionalData.has(Constants.COLUMN)){
-                        uid = additionalData.getString(Constants.UID);
-                        targetColumnName = additionalData.getString(Constants.COLUMN);
-                    } else{
+
+                    // Extract additional data if available
+                    String uid = "";
+                    String targetColumnName;
+                    String sourceInput = "";
+                    String targetInput = "";
+                    String messageKey = "";
+                    int ced = 0;
+
+                    if (additionalData != null) {
+                        uid = additionalData.optString(Constants.UID, "");
+                        targetColumnName = additionalData.optString(Constants.COLUMN, "");
+                        sourceInput = additionalData.optString(Constants.VALUE, "");
+                        targetInput = additionalData.optString(Constants.ORIGINAL_VALUE, "");
+                        messageKey = additionalData.optString("MessageKey", "");
+                        ced = additionalData.optInt(Constants.CED, 0);
+                    } else {
                         targetColumnName = "";
-                        logger.error("trxn token: {} doesn't have either uid or column data. Can't do comparison for this token",transactionToken);
-                        valueNotPresentFlag = true;
                     }
 
-                    Map<Long, String> responseIdColumnNamesMap = tokenToResponseIdToColumnNamesMap.getOrDefault(transactionToken, Collections.emptyMap());
+                    // Check if we have feedback data and matches
+                    boolean hasFeedback = eachResponse != null && eachResponse.has(Constants.MATCHES);
+                    JSONArray matches = hasFeedback ? eachResponse.getJSONArray(Constants.MATCHES) : new JSONArray();
 
+                    String testStatus;
+                    String comments;
+                    int truePositives = 0;
                     boolean isColumnMismatch = false;
                     int filteredCount = 0;
-                    if(!valueNotPresentFlag) {
+                    int matchCount = 0;
+                    String feedbackStatus = "";
+                    String feedback = "";
+
+                    if (!hasFeedback) {
+                        // No feedback data - mark as FAIL
+                        testStatus = Constants.FAIL;
+                        comments = "No feedback data available";
+                        logger.debug("Token {} has no feedback data, marking as FAIL", transactionToken);
+                    } else if (matches.length() == 0) {
+                        // Has feedback but no matches - mark as FAIL
+                        testStatus = Constants.FAIL;
+                        comments = "No matches found in feedback";
+                        matchCount = eachResponse.optInt(Constants.MATCHING_COUNT, 0);
+                        feedbackStatus = eachResponse.optString(Constants.MATCHING_STATUS, "");
+                        feedback = eachResponse.toString();
+                        if (feedback.length() > 32767) {
+                            feedback = "Value too large check feedback table";
+                        }
+                        logger.debug("Token {} has feedback but no matches, marking as FAIL", transactionToken);
+                    } else {
+                        // Has feedback and matches - perform analysis
+                        logger.debug("Token {} has {} matches, performing analysis", transactionToken, matches.length());
+
+                        Map<Long, String> responseIdColumnNamesMap = tokenToResponseIdToColumnNamesMap.getOrDefault(transactionToken, Collections.emptyMap());
+
                         for (int i = 0; i < matches.length(); i++) {
                             JSONObject match = matches.getJSONObject(i);
                             String tagNameCsv = match.optString("tagName", "");
@@ -202,46 +250,61 @@ public class AnalyzerMain {
                                 }
                             }
                         }
-                        String testStatus = truePositives > 0 || isColumnMismatch? Constants.PASS : Constants.FAIL;
 
-                        logger.info("Status for trxn token {} : {}",transactionToken,testStatus);
-                        if (Constants.FAIL.equalsIgnoreCase(testStatus))
-                            logger.info("isColumnMismatch : {}",isColumnMismatch);
-
-                        // Collect report row data
-                        int ced = additionalData.optInt(Constants.CED, 0);
-                        String type = "";
-                        if (ced == 0) type = Constants.EXACT;
-                        else if (ced > 0) type = Constants.FUZZY + ced + Constants.CED;
-                        else if (ced == -1) type = "STOPWORD";
-                        else if (ced == -2) type = "SYNONYM";
-
-                        String ruleName = webService +" "+type;
-
-                        String message = tokenToRawMsg.getOrDefault(transactionToken, "");
-                        String sourceInput = additionalData.optString(Constants.VALUE, "");
-                        String targetInput = additionalData.optString(Constants.ORIGINAL_VALUE, "");
-                        int matchCount = eachResponse.optInt(Constants.MATCHING_COUNT, 0);
-                        String feedbackStatus = eachResponse.optString(Constants.MATCHING_STATUS, "");
-                        String feedback = eachResponse.toString();
+                        testStatus = truePositives > 0 || isColumnMismatch ? Constants.PASS : Constants.FAIL;
+                        matchCount = eachResponse.optInt(Constants.MATCHING_COUNT, 0);
+                        feedbackStatus = eachResponse.optString(Constants.MATCHING_STATUS, "");
+                        feedback = eachResponse.toString();
                         if (feedback.length() > 32767) {
                             feedback = "Value too large check feedback table";
                         }
-                        String comments = "";
-                        if(Constants.PASS.equalsIgnoreCase(testStatus)){
-                            if(isColumnMismatch) comments = Constants.COLUMN_MISMATCH_COMMENT;
-                        } else comments = Constants.NO_MATCH_COMMENT;
 
+                        if (Constants.PASS.equalsIgnoreCase(testStatus)) {
+                            if (isColumnMismatch) comments = Constants.COLUMN_MISMATCH_COMMENT;
+                            else comments = "";
+                        } else {
+                            comments = Constants.NO_MATCH_COMMENT;
+                        }
 
-
-                        ReportRow row = new ReportRow(0, ruleName, message, tagName, sourceInput, targetInput,
-                                targetColumnName, watchListType, uid, transactionToken, runSkey,
-                                matchCount, feedbackStatus, filteredCount, feedback, testStatus, comments, additionalData.optString("MessageKey", ""), isColumnMismatch);
-                        queue.add(row);
+                        logger.info("Status for transaction token {}: {} (True positives: {}, Filtered: {})",
+                                  transactionToken, testStatus, truePositives, filteredCount);
+                        if (Constants.FAIL.equalsIgnoreCase(testStatus)) {
+                            logger.info("isColumnMismatch for token {}: {}", transactionToken, isColumnMismatch);
+                        }
                     }
 
+                    // Determine rule name based on CED
+                    String type = "";
+                    if (ced == 0) type = Constants.EXACT;
+                    else if (ced > 0) type = Constants.FUZZY + ced + Constants.CED;
+                    else if (ced == -1) type = "STOPWORD";
+                    else if (ced == -2) type = "SYNONYM";
+
+                    String ruleName = webService + " " + type;
+                    String message = tokenToRawMsg.getOrDefault(transactionToken, "");
+
+                    // Always create a ReportRow for every token
+                    ReportRow row = new ReportRow(0, ruleName, message, tagName, sourceInput, targetInput,
+                            targetColumnName, watchListType, uid, transactionToken, runSkey,
+                            matchCount, feedbackStatus, filteredCount, feedback, testStatus, comments, messageKey, isColumnMismatch);
+                    queue.add(row);
+
+                    logger.debug("ReportRow created for token: {} with status: {}", transactionToken, testStatus);
+
                 } catch (Exception e) {
-                    logger.error("Error processing transactionToken {}: {}", transactionToken, e.getMessage(), e);
+                    logger.error("Error processing transaction token {}: {}", transactionToken, e.getMessage(), e);
+                    // Even on error, create a minimal ReportRow to ensure token is included
+                    try {
+                        String message = tokenToRawMsg.getOrDefault(transactionToken, "");
+                        ReportRow errorRow = new ReportRow(0, "ERROR", message, tagName, "", "", "",
+                                watchListType, "", transactionToken, runSkey,
+                                0, "ERROR", 0, "Processing failed: " + e.getMessage(),
+                                Constants.FAIL, "Processing error", "", false);
+                        queue.add(errorRow);
+                        logger.warn("Created error ReportRow for token: {}", transactionToken);
+                    } catch (Exception inner) {
+                        logger.error("Failed to create error ReportRow for token: {}", transactionToken, inner);
+                    }
                 }
             }, executor);
             futures.add(future);
