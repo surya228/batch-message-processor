@@ -457,12 +457,19 @@ public class RawMessageGenerator {
                     String valueId = valueEntry.getKey();
                     String valuesStr = valueEntry.getValue();
                     String[] synonyms = valuesStr.split(",");
-                    if (Arrays.asList(synonyms).contains(toBeReplaced)) {
+                    boolean matchFound = false;
+                    for (String syn : synonyms) {
+                        if (syn.equalsIgnoreCase(toBeReplaced)) {
+                            matchFound = true;
+                            break;
+                        }
+                    }
+                    if (matchFound) {
                         found = true;
                         usedLookupIds.add(lookupId);
                         usedValueIds.add(valueId);
                         for (String alt : synonyms) {
-                            if (!alt.equals(toBeReplaced) && !alts.contains(alt)) {
+                            if (!alt.equalsIgnoreCase(toBeReplaced) && !alts.contains(alt)) {
                                 alts.add(alt);
                             }
                         }
@@ -497,11 +504,18 @@ public class RawMessageGenerator {
                         String valueId = valueEntry.getKey();
                         String valuesStr = valueEntry.getValue();
                         String[] synonyms = valuesStr.split(",");
-                        if (Arrays.asList(synonyms).contains(word)) {
+                        boolean wordMatch = false;
+                        for (String syn : synonyms) {
+                            if (syn.equalsIgnoreCase(word)) {
+                                wordMatch = true;
+                                break;
+                            }
+                        }
+                        if (wordMatch) {
                             wordLids.add(lookupId);
                             wordVids.add(valueId);
                             for (String alt : synonyms) {
-                                if (!alt.equals(word) && !wordOptions.contains(alt)) {
+                                if (!alt.equalsIgnoreCase(word) && !wordOptions.contains(alt)) {
                                     wordOptions.add(alt);
                                 }
                             }

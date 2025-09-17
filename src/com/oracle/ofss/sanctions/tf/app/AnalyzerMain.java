@@ -109,7 +109,7 @@ public class AnalyzerMain {
 
                     Map<Long, String> responseIdColumnNamesMap = tokenToResponseIdToColumnNamesMap.getOrDefault(transactionToken, Collections.emptyMap());
 
-                    boolean failedDueToColumnMismatch = false;
+                    boolean isColumnMismatch = false;
                     int filteredCount = 0;
                     if(!valueNotPresentFlag) {
                         for (int i = 0; i < matches.length(); i++) {
@@ -136,17 +136,18 @@ public class AnalyzerMain {
                             if (flag) {
                                 if (columnNames.stream().anyMatch(col -> col.equalsIgnoreCase(targetColumnName))) { // Case-insensitive match
                                     truePositives++;
-                                    failedDueToColumnMismatch = false;
+                                    isColumnMismatch = false;
                                     break; // Early exit if we only need count >=1
                                 } else {
-                                    failedDueToColumnMismatch = true;
+                                    isColumnMismatch = true;
                                 }
                             }
                         }
-                        String testStatus = truePositives > 0 ? Constants.PASS : Constants.FAIL;
+                        String testStatus = truePositives > 0 || isColumnMismatch? Constants.PASS : Constants.FAIL;
+
                         logger.info("Status for trxn toke {} : {}",transactionToken,testStatus);
                         if (Constants.FAIL.equalsIgnoreCase(testStatus))
-                            logger.info("failedDueToColumnMismatch : {}",failedDueToColumnMismatch);
+                            logger.info("isColumnMismatch : {}",isColumnMismatch);
 
                         // Collect report row data
                         int ced = additionalData.optInt(Constants.CED, 0);
@@ -169,12 +170,12 @@ public class AnalyzerMain {
                         }
                         String comments = "";
                         if (Constants.FAIL.equals(testStatus)) {
-                            comments = failedDueToColumnMismatch ? Constants.COLUMN_MISMATCH_COMMENT : Constants.NO_MATCH_COMMENT;
+                            comments = isColumnMismatch ? Constants.COLUMN_MISMATCH_COMMENT : Constants.NO_MATCH_COMMENT;
                         }
 
                         ReportRow row = new ReportRow(0, ruleName, message, tagName, sourceInput, targetInput,
                                 targetColumnName, watchListType, uid, transactionToken, runSkey,
-                                matchCount, feedbackStatus, filteredCount, feedback, testStatus, comments, additionalData.optString("MessageKey", ""));
+                                matchCount, feedbackStatus, filteredCount, feedback, testStatus, comments, additionalData.optString("MessageKey", ""), isColumnMismatch);
                         queue.add(row);
                     }
 
@@ -235,6 +236,11 @@ public class AnalyzerMain {
                 highlightRed.setFillPattern(FillPatternType.SOLID_FOREGROUND);
                 highlightRed.setFont(boldFont);
 
+                CellStyle highlightYellow = wb.createCellStyle();
+                highlightYellow.setFillForegroundColor(IndexedColors.YELLOW.getIndex());
+                highlightYellow.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                highlightYellow.setFont(boldFont);
+
                 String[] headers = {
                         Constants.SEQ_NO,
                         Constants.RULE,
@@ -279,11 +285,17 @@ public class AnalyzerMain {
                     row.createCell(13).setCellValue(rr.specificMatches);
                     row.createCell(14).setCellValue(rr.feedback);
                     row.createCell(15).setCellValue(rr.testStatus);
+
                     if (Constants.PASS.equals(rr.testStatus)) {
-                        row.getCell(15).setCellStyle(highlightGreen);
+                        if (rr.isColumnMismatch) {
+                            row.getCell(15).setCellStyle(highlightYellow);
+                        } else {
+                            row.getCell(15).setCellStyle(highlightGreen);
+                        }
                     } else if (Constants.FAIL.equals(rr.testStatus)) {
                         row.getCell(15).setCellStyle(highlightRed);
                     }
+
                     row.createCell(16).setCellValue(rr.comments);
                     row.createCell(17).setCellValue(rr.messageKey);
                     rowNum++;

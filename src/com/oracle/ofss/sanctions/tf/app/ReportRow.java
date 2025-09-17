@@ -19,11 +19,12 @@ public class ReportRow {
     public String testStatus;
     public String comments;
     public String messageKey;
+    public boolean isColumnMismatch;
 
 public ReportRow(int seqNo, String ruleName, String message, String tag, String sourceInput, String targetInput,
                      String targetColumn, String watchlist, String nUid, long transactionToken, String runSkey,
                      int matchCount, String feedbackStatus, int specificMatches, String feedback,
-                     String testStatus, String comments, String messageKey) {
+                     String testStatus, String comments, String messageKey, boolean isColumnMismatch) {
         this.seqNo = seqNo;
         this.ruleName = ruleName;
         this.message = message;
@@ -42,5 +43,6 @@ public ReportRow(int seqNo, String ruleName, String message, String tag, String 
         this.testStatus = testStatus;
         this.comments = comments;
         this.messageKey = messageKey;
+        this.isColumnMismatch = isColumnMismatch;
     }
 }
