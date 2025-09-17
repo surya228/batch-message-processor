@@ -35,9 +35,10 @@ public class AnalyzerMain {
         String osRunSkey = props.getProperty(Constants.OS_RUN_SKEY);
         String otRunSkey = props.getProperty(Constants.OT_RUN_SKEY);
         String batchType = props.getProperty(Constants.BATCH_TYPE);
+        int excelRowLimit = Integer.parseInt(props.getProperty(Constants.EXCEL_ROW_LIMIT, String.valueOf(Constants.DEFAULT_EXCEL_ROW_LIMIT)));
 
-        int msgCategory = batchType.equalsIgnoreCase("ISO20022")?3:4;
-        String msgCategoryString = batchType.equalsIgnoreCase("ISO20022")?"SEPA":"NACHA";
+        int msgCategory = batchType.equalsIgnoreCase(Constants.ISO20022)?Constants.THREE:Constants.FOUR;
+        String msgCategoryString = batchType.equalsIgnoreCase(Constants.ISO20022)?Constants.SEPA:Constants.NACHA;
 
         String misDate = props.getProperty(Constants.MIS_DATE);
         String runNo = props.getProperty(Constants.RUN_NO);
@@ -57,10 +58,14 @@ public class AnalyzerMain {
             throw e;
         }
 
-        String matchHeader = (osReportRows != null) ? "# " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " matches" : null;
-//        String otMatchHeader = (otReportRows != null) ? "# " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " matches" : null;
+        String matchHeader = (osReportRows != null || otReportRows != null) ? "# " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " "+ Constants.MATCHES : null;
 
-        writeExcel(osReportRows, otReportRows, misDate, runNo, batchType, matchHeader);
+        if (osReportRows != null) {
+            writeSplitExcel(osReportRows, misDate, runNo, batchType, matchHeader, "OS", excelRowLimit);
+        }
+        if (otReportRows != null) {
+            writeSplitExcel(otReportRows, misDate, runNo, batchType, matchHeader, "OT", excelRowLimit);
+        }
 
     }
 
@@ -118,14 +123,14 @@ public class AnalyzerMain {
                             Set<String> columnNames = columnNameWls != null ? Arrays.stream(columnNameWls.split(",")).collect(Collectors.toSet()) : Collections.emptySet();
 
                             // Filtered count for OS # ... matches
-                            if (String.valueOf(match.optInt("webServiceID")).equals(webServiceId) &&
+                            if (String.valueOf(match.optInt(Constants.WEBSERVICE_ID_FROM_MATCH)).equals(webServiceId) &&
                                     (!webServiceId.equals("3") && !webServiceId.equals("4") || match.optString("watchlistType").equalsIgnoreCase(watchListType))) {
                                 filteredCount++;
                             }
 
                             boolean flag = uid.equals(targetUid)
                                     && watchListType.equalsIgnoreCase(match.optString("watchlistType"))
-                                    && webServiceId.equalsIgnoreCase(String.valueOf(match.getInt("webServiceID")))
+                                    && webServiceId.equalsIgnoreCase(String.valueOf(match.getInt(Constants.WEBSERVICE_ID_FROM_MATCH)))
                                     && tagNames.contains(tagName);
 
                             if (flag) {
@@ -194,98 +199,102 @@ public class AnalyzerMain {
         return reportRows;
     }
 
-    private static void writeExcel(List<ReportRow> osReportRows, List<ReportRow> otReportRows, String misDate, String runNo, String batchType, String matchHeader) throws IOException {
-        try (Workbook wb = new XSSFWorkbook()) {
-            Font boldFont = wb.createFont();
-            boldFont.setBold(true);
-
-            CellStyle highlightGreen = wb.createCellStyle();
-            highlightGreen.setFillForegroundColor(IndexedColors.BRIGHT_GREEN.getIndex());
-            highlightGreen.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-            highlightGreen.setFont(boldFont);
-
-            CellStyle highlightRed = wb.createCellStyle();
-            highlightRed.setFillForegroundColor(IndexedColors.RED.getIndex());
-            highlightRed.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-            highlightRed.setFont(boldFont);
-
-            createSheet(wb, Constants.OS_SHEET_NAME, osReportRows, matchHeader, highlightGreen, highlightRed);
-            createSheet(wb, Constants.OT_SHEET_NAME, otReportRows, matchHeader, highlightGreen, highlightRed);
-
-            String prefix;
-            if ("ISO20022".equalsIgnoreCase(batchType)) {
-                prefix = misDate + "_RUN" + runNo + "_STG_ANALYSIS_";
-            } else if ("NACHA".equalsIgnoreCase(batchType)) {
-                prefix = misDate + "_RUN" + runNo + "_ACH_ANALYSIS_";
-            } else {
-                throw new IllegalArgumentException("Invalid batchType");
-            }
-            String fileName = prefix + Constants.XLSX_EXT;
-            File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
-            try (FileOutputStream fos = new FileOutputStream(outputFile)) {
-                wb.write(fos);
-            }
-            logger.info("Excel report generated at: {}", outputFile.getAbsolutePath());
-        }
-    }
-
-    private static void createSheet(Workbook wb, String sheetName, List<ReportRow> reportRows, String matchHeader, CellStyle highlightGreen, CellStyle highlightRed) {
+    private static void writeSplitExcel(List<ReportRow> reportRows, String misDate, String runNo, String batchType, String matchHeader, String type, int rowLimit) throws IOException {
         if (reportRows == null || reportRows.isEmpty()) return;
 
-        Sheet sheet = wb.createSheet(sheetName);
-
-        String[] headers = {
-                Constants.SEQ_NO,
-                Constants.RULE,
-                Constants.MESSAGE,
-                Constants.TAG,
-                Constants.SOURCE_INPUT,
-                Constants.TARGET_INPUT,
-                Constants.TARGET_COLUMN,
-                Constants.WATCHLIST,
-                Constants.NUID,
-                Constants.TRXN_TOKEN,
-                Constants.RUN_SKEY,
-                Constants.MATCH_COUNT,
-                Constants.FEEDBACK_STATUS,
-                matchHeader,
-                Constants.FEEDBACK,
-                Constants.TEST_STATUS,
-                Constants.COMMENTS,
-                Constants.MESSAGE_KEY
-        };
-        Row headerRow = sheet.createRow(0);
-        for (int i = 0; i < headers.length; i++) {
-            headerRow.createCell(i).setCellValue(headers[i]);
+        String prefix;
+        if ("ISO20022".equalsIgnoreCase(batchType)) {
+            prefix = misDate + "_RUN" + runNo + "_STG_ANALYSIS_" + type;
+        } else if ("NACHA".equalsIgnoreCase(batchType)) {
+            prefix = misDate + "_RUN" + runNo + "_ACH_ANALYSIS_" + type;
+        } else {
+            throw new IllegalArgumentException("Invalid batchType");
         }
 
-        int rowNum = 1;
-        for (ReportRow rr : reportRows) {
-            Row row = sheet.createRow(rowNum);
-            row.createCell(0).setCellValue(rowNum);
-            row.createCell(1).setCellValue(rr.ruleName);
-            row.createCell(2).setCellValue(rr.message);
-            row.createCell(3).setCellValue(rr.tag);
-            row.createCell(4).setCellValue(rr.sourceInput);
-            row.createCell(5).setCellValue(rr.targetInput);
-            row.createCell(6).setCellValue(rr.targetColumn);
-            row.createCell(7).setCellValue(rr.watchlist);
-            row.createCell(8).setCellValue(rr.nUid);
-            row.createCell(9).setCellValue(rr.transactionToken);
-            row.createCell(10).setCellValue(rr.runSkey);
-            row.createCell(11).setCellValue(rr.matchCount);
-            row.createCell(12).setCellValue(rr.feedbackStatus);
-            row.createCell(13).setCellValue(rr.specificMatches);
-            row.createCell(14).setCellValue(rr.feedback);
-            row.createCell(15).setCellValue(rr.testStatus);
-            if (Constants.PASS.equals(rr.testStatus)) {
-                row.getCell(15).setCellStyle(highlightGreen);
-            } else if (Constants.FAIL.equals(rr.testStatus)) {
-                row.getCell(15).setCellStyle(highlightRed);
+        int fileCount = (int) Math.ceil((double) reportRows.size() / rowLimit);
+        for (int i = 0; i < fileCount; i++) {
+            int start = i * rowLimit;
+            int end = Math.min(start + rowLimit, reportRows.size());
+            List<ReportRow> chunk = reportRows.subList(start, end);
+
+            String fileName = (fileCount > 1) ? prefix + "_" + (i + 1) + Constants.XLSX_EXT : prefix + Constants.XLSX_EXT;
+
+            try (Workbook wb = new XSSFWorkbook()) {
+                Sheet sheet = wb.createSheet(type);
+
+                Font boldFont = wb.createFont();
+                boldFont.setBold(true);
+
+                CellStyle highlightGreen = wb.createCellStyle();
+                highlightGreen.setFillForegroundColor(IndexedColors.BRIGHT_GREEN.getIndex());
+                highlightGreen.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                highlightGreen.setFont(boldFont);
+
+                CellStyle highlightRed = wb.createCellStyle();
+                highlightRed.setFillForegroundColor(IndexedColors.RED.getIndex());
+                highlightRed.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                highlightRed.setFont(boldFont);
+
+                String[] headers = {
+                        Constants.SEQ_NO,
+                        Constants.RULE,
+                        Constants.MESSAGE,
+                        Constants.TAG,
+                        Constants.SOURCE_INPUT,
+                        Constants.TARGET_INPUT,
+                        Constants.TARGET_COLUMN,
+                        Constants.WATCHLIST,
+                        Constants.NUID,
+                        Constants.TRXN_TOKEN,
+                        Constants.RUN_SKEY,
+                        Constants.MATCH_COUNT,
+                        Constants.FEEDBACK_STATUS,
+                        matchHeader,
+                        Constants.FEEDBACK,
+                        Constants.TEST_STATUS,
+                        Constants.COMMENTS,
+                        Constants.MESSAGE_KEY
+                };
+                Row headerRow = sheet.createRow(0);
+                for (int j = 0; j < headers.length; j++) {
+                    headerRow.createCell(j).setCellValue(headers[j]);
+                }
+
+                int rowNum = 1;
+                for (ReportRow rr : chunk) {
+                    Row row = sheet.createRow(rowNum);
+                    row.createCell(0).setCellValue(rowNum);
+                    row.createCell(1).setCellValue(rr.ruleName);
+                    row.createCell(2).setCellValue(rr.message);
+                    row.createCell(3).setCellValue(rr.tag);
+                    row.createCell(4).setCellValue(rr.sourceInput);
+                    row.createCell(5).setCellValue(rr.targetInput);
+                    row.createCell(6).setCellValue(rr.targetColumn);
+                    row.createCell(7).setCellValue(rr.watchlist);
+                    row.createCell(8).setCellValue(rr.nUid);
+                    row.createCell(9).setCellValue(rr.transactionToken);
+                    row.createCell(10).setCellValue(rr.runSkey);
+                    row.createCell(11).setCellValue(rr.matchCount);
+                    row.createCell(12).setCellValue(rr.feedbackStatus);
+                    row.createCell(13).setCellValue(rr.specificMatches);
+                    row.createCell(14).setCellValue(rr.feedback);
+                    row.createCell(15).setCellValue(rr.testStatus);
+                    if (Constants.PASS.equals(rr.testStatus)) {
+                        row.getCell(15).setCellStyle(highlightGreen);
+                    } else if (Constants.FAIL.equals(rr.testStatus)) {
+                        row.getCell(15).setCellStyle(highlightRed);
+                    }
+                    row.createCell(16).setCellValue(rr.comments);
+                    row.createCell(17).setCellValue(rr.messageKey);
+                    rowNum++;
+                }
+
+                File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
+                try (FileOutputStream fos = new FileOutputStream(outputFile)) {
+                    wb.write(fos);
+                }
+                logger.info("Excel report generated at: {}", outputFile.getAbsolutePath());
             }
-            row.createCell(16).setCellValue(rr.comments);
-            row.createCell(17).setCellValue(rr.messageKey);
-            rowNum++;
         }
     }
 

@@ -106,6 +106,8 @@ public class Constants {
     // Excel splitting configuration
     public static String JSON_OBJJECT_LIMIT = "jsonObjectLimit";
     public static int DEFAULT_ROW_LIMIT = 1000;
+    public static String EXCEL_ROW_LIMIT = "excelRowLimit";
+    public static int DEFAULT_EXCEL_ROW_LIMIT = 1000;
     public static String FILE_NAME_LIST = "filename.txt";
 
     // Status strings
@@ -146,6 +148,12 @@ public class Constants {
     public static final String MATCHES = "matches";
     public static final String MATCHED_WATCHLIST_ID = "matchedWatchlistId";
     public static final String RESPONSE_ID = "responseID";
+    public static final String ISO20022 = "ISO20022";
+    public static final String SEPA = "SEPA";
+    public static final String NACHA = "NACHA";
+    public static final int THREE = 3;
+    public static final int FOUR = 4;
+    public static final String WEBSERVICE_ID_FROM_MATCH = "webServiceID";
 
     public static String getMatchHeaderSuffix(String webServiceId, String watchlistType) {
         if (webServiceId.equals("3")) {
