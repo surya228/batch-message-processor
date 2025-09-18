@@ -29,13 +29,9 @@ public class AnalyzerMain {
         logger.info("Hello World from Analyzer Main!!!");
 
         Properties props = loadProperties();
-        String watchListType = props.getProperty(Constants.WATCHLIST_TYPE);
-        String webServiceId = props.getProperty(Constants.WEBSERVICE_ID);
-        String webService = props.getProperty(Constants.WEBSERVICE);
-        String tagName = props.getProperty(Constants.TAGNAME);
         String osRunSkey = props.getProperty(Constants.OS_RUN_SKEY);
         String otRunSkey = props.getProperty(Constants.OT_RUN_SKEY);
-        String batchType = props.getProperty(Constants.BATCH_TYPE);
+        String batchType = props.getProperty(Constants.ANALYZER_BATCH_TYPE);
         int excelRowLimit = Integer.parseInt(props.getProperty(Constants.EXCEL_ROW_LIMIT, String.valueOf(Constants.DEFAULT_EXCEL_ROW_LIMIT)));
 
         int msgCategory = batchType.equalsIgnoreCase(Constants.ISO20022)?Constants.THREE:Constants.FOUR;
@@ -49,18 +45,18 @@ public class AnalyzerMain {
 
         try (Connection connection = SQLUtility.getDbConnection()) {
             if (osRunSkey != null && !osRunSkey.isEmpty()) {
-                osReportRows = processForRunSkey(connection, osRunSkey, batchType, msgCategory, msgCategoryString, watchListType, webServiceId, webService, tagName);
+                osReportRows = processForRunSkey(connection, osRunSkey, batchType, msgCategory, msgCategoryString);
             }
             if (otRunSkey != null && !otRunSkey.isEmpty()) {
-                otReportRows = processForRunSkey(connection, otRunSkey, batchType, msgCategory, msgCategoryString, watchListType, webServiceId, webService, tagName);
+                otReportRows = processForRunSkey(connection, otRunSkey, batchType, msgCategory, msgCategoryString);
             }
         } catch (Exception e) {
             logger.error("Error during database operations: {}", e.getMessage(), e);
             throw e;
         }
 
-        String matchHeader = (osReportRows != null || otReportRows != null) ? "# " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " "+ Constants.MATCHES : null;
-
+//        String matchHeader = (osReportRows != null || otReportRows != null) ? "# " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " "+ Constants.MATCHES : null;
+        String matchHeader = "Specific Count";
         if (osReportRows != null) {
             writeSplitExcel(osReportRows, misDate, runNo, batchType, matchHeader, "OS", excelRowLimit);
         }
@@ -70,7 +66,7 @@ public class AnalyzerMain {
 
     }
 
-    private static List<ReportRow> processForRunSkey(Connection connection, String runSkey, String batchType, int msgCategory, String msgCategoryString, String watchListType, String webServiceId, String webService, String tagName) throws Exception {
+    private static List<ReportRow> processForRunSkey(Connection connection, String runSkey, String batchType, int msgCategory, String msgCategoryString) throws Exception {
         long startTime = System.currentTimeMillis();
 
         String batchTable = batchType.equalsIgnoreCase("ISO20022") ? "FCC_TF_XML_BATCH_TRXN" : "FCC_TF_ACH_BATCH_TRXN";
@@ -158,12 +154,12 @@ public class AnalyzerMain {
 
         long dbEndTime = System.currentTimeMillis();
         logger.info("DB queries took: {} ms", (dbEndTime - startTime));
-        return analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, watchListType, webServiceId, webService, tagName, runSkey, tokenToRawMsg);
+        return analyzeResults(transactionTokens, tokenToResponseIdToColumnNamesMap, feedbackMap, tokenToAdditionalDataMap, runSkey, tokenToRawMsg);
     }
 
     private static List<ReportRow> analyzeResults(List<Long> transactionTokens, Map<Long, Map<Long, String>> tokenToResponseIdToColumnNamesMap,
                                                   Map<Long, JSONObject> feedbackMap, Map<Long, JSONObject> tokenToAdditionalDataMap,
-                                                  String watchListType, String webServiceId, String webService, String tagName, String runSkey, Map<Long, String> tokenToRawMsg) {
+                                                  String runSkey, Map<Long, String> tokenToRawMsg) {
         long startTime = System.currentTimeMillis();
         // Parallel processing of each trxn token
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
@@ -171,21 +167,28 @@ public class AnalyzerMain {
         ConcurrentLinkedQueue<ReportRow> queue = new ConcurrentLinkedQueue<>();
         for (long transactionToken : transactionTokens) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                String uid = "";
+                String webService = "";
+                String webServiceId = "";
+                String watchListType = "";
+                String tagName = "";
+                String targetColumnName;
+                String sourceInput = "";
+                String targetInput = "";
+                String messageKey = "";
+                int ced = 0;
                 try {
                     // Always process every token - no early returns
                     JSONObject eachResponse = feedbackMap.get(transactionToken);
                     JSONObject additionalData = tokenToAdditionalDataMap.get(transactionToken);
 
                     // Extract additional data if available
-                    String uid = "";
-                    String targetColumnName;
-                    String sourceInput = "";
-                    String targetInput = "";
-                    String messageKey = "";
-                    int ced = 0;
-
                     if (additionalData != null) {
                         uid = additionalData.optString(Constants.UID, "");
+                        webService = additionalData.optString(Constants.WEBSERVICE, "");
+                        webServiceId = additionalData.optString(Constants.WEBSERVICE_ID, "");
+                        watchListType = additionalData.optString(Constants.WATCHLIST_TYPE, "");
+                        tagName = additionalData.optString(Constants.TAGNAME, "");
                         targetColumnName = additionalData.optString(Constants.COLUMN, "");
                         sourceInput = additionalData.optString(Constants.VALUE, "");
                         targetInput = additionalData.optString(Constants.ORIGINAL_VALUE, "");

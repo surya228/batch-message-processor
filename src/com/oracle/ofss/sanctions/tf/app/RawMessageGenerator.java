@@ -677,7 +677,7 @@ public class RawMessageGenerator {
             rowLimit = Constants.DEFAULT_ROW_LIMIT;
         }
 
-        String batchType = props.getProperty(Constants.BATCH_TYPE).toUpperCase();
+        String batchType = props.getProperty(Constants.GENERATOR_BATCH_TYPE).toUpperCase();
         String misDate = props.getProperty(Constants.MIS_DATE);
         String runNo = props.getProperty(Constants.RUN_NO);
 

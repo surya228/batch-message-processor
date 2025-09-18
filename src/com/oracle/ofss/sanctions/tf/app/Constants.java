@@ -44,7 +44,8 @@ public class Constants {
     public static String ENCODER = "UTF-8";
 
     // Property Keys for Configuration
-    public static String BATCH_TYPE = "batchType";
+    public static String GENERATOR_BATCH_TYPE = "generator.batchType";
+    public static String ANALYZER_BATCH_TYPE = "analyzer.batchType";
     public static String MIS_DATE = "misDate";
     public static String RUN_NO = "runNo";
     public static String TAGNAME = "tagName";

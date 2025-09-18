@@ -24,7 +24,7 @@ public class RawMessageGeneratorMain {
         Properties props = loadProperties();
 
         // Validate new properties
-        String batchType = props.getProperty(Constants.BATCH_TYPE);
+        String batchType = props.getProperty(Constants.GENERATOR_BATCH_TYPE);
         if (batchType == null || (!batchType.equalsIgnoreCase("ISO20022") && !batchType.equalsIgnoreCase("NACHA"))) {
             logger.error("Invalid or missing batchtype in config.properties. Must be 'ISO20022' or 'NACHA'.");
             System.exit(1);
