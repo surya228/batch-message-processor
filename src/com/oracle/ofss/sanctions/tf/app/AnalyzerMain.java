@@ -74,16 +74,13 @@ public class AnalyzerMain {
         long startTime = System.currentTimeMillis();
 
         String batchTable = batchType.equalsIgnoreCase("ISO20022") ? "FCC_TF_XML_BATCH_TRXN" : "FCC_TF_ACH_BATCH_TRXN";
-        String rawDataTable = msgCategory == 3 ? "fcc_tf_xml_raw_data" : "fcc_tf_ach_raw_data";
 
         String query = "SELECT " +
                        "b.N_GRP_MSG_ID, " +
                        "b.C_RAW_MSG, " +
-                       "f.C_FEEDBACK_MESSAGE, " +
-                       "r.C_ADDITIONAL_DATA " +
+                       "f.C_FEEDBACK_MESSAGE " +
                        "FROM " + batchTable + " b " +
                        "LEFT JOIN fcc_tf_feedback f ON b.N_GRP_MSG_ID = f.N_TRAX_TOKEN AND f.V_MSG_CATEGORY = ? " +
-                       "LEFT JOIN " + rawDataTable + " r ON b.N_GRP_MSG_ID = r.N_GRP_MSG_ID " +
                        "WHERE b.N_RUN_SKEY = ? ";
 
         Set<Long> allTokens = new HashSet<>();
@@ -121,14 +118,28 @@ public class AnalyzerMain {
                         logger.debug("Token {} has no feedback data, stored default feedback", token);
                     }
 
-                    // Additional Data
-                    String additionalJson = rs.getString("C_ADDITIONAL_DATA");
-                    if (additionalJson != null && !additionalJson.isEmpty() && !tokenToAdditionalDataMap.containsKey(token)) {
-                        tokenToAdditionalDataMap.put(token, new JSONObject(additionalJson));
+                    // Additional Data - extract from raw message
+                    String rawMsgStr = rs.getString("C_RAW_MSG");
+                    if (rawMsgStr != null && !rawMsgStr.isEmpty() && !tokenToAdditionalDataMap.containsKey(token)) {
+                        try {
+                            JSONObject rawMessageObj = new JSONObject(rawMsgStr);
+                            if (rawMessageObj.has("additionalData")) {
+                                JSONObject additionalData = rawMessageObj.getJSONObject("additionalData");
+                                tokenToAdditionalDataMap.put(token, additionalData);
+                            } else {
+                                // No additionalData field in raw message
+                                tokenToAdditionalDataMap.put(token, new JSONObject());
+                                logger.debug("Token {} has no additionalData field in raw message, initialized empty object", token);
+                            }
+                        } catch (Exception e) {
+                            // Error parsing raw message JSON or extracting additionalData
+                            tokenToAdditionalDataMap.put(token, new JSONObject());
+                            logger.warn("Token {} failed to parse additional data from raw message: {}", token, e.getMessage());
+                        }
                     } else if (!tokenToAdditionalDataMap.containsKey(token)) {
                         // Initialize empty additional data if not present
                         tokenToAdditionalDataMap.put(token, new JSONObject());
-                        logger.debug("Token {} has no additional data, initialized empty object", token);
+                        logger.debug("Token {} has no raw message, initialized empty additional data object", token);
                     }
                 }
             }
@@ -185,8 +196,8 @@ public class AnalyzerMain {
                     }
 
                     // Check if we have feedback data and matches
-                    boolean hasFeedback = eachResponse != null && eachResponse.has(Constants.MATCHES);
-                    JSONArray matches = hasFeedback ? eachResponse.getJSONArray(Constants.MATCHES) : new JSONArray();
+                    boolean hasFeedback = eachResponse != null ;//&& eachResponse.has(Constants.MATCHES);
+                    JSONArray matches = hasFeedback && eachResponse.has(Constants.MATCHES) ? eachResponse.getJSONArray(Constants.MATCHES) : new JSONArray();
                     int matchCount = matches.length();
 
                     String testStatus;
