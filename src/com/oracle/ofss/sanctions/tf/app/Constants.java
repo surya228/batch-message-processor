@@ -88,6 +88,7 @@ public class Constants {
     public static String IS_STOPWORD_PRESENT = "isStopwordPresent";
     public static String LOOKUP_ID = "lookupId";
     public static String LOOKUP_VALUE_ID = "lookupValueId";
+    public static String MESSAGE_KEY_ADDITIONAL = "messageKey";
 
     // Date formats
     public static String DATE_TIME_FORMAT = "ddMMyyHHmmss";

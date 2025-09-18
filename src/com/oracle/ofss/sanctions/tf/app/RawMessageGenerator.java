@@ -327,7 +327,7 @@ public class RawMessageGenerator {
             additionalData.put(Constants.LOOKUP_VALUE_ID, lookupValueIds);
 
             String messageKey = dateTimeStr + (updatedCount + 1);
-            additionalData.put("MessageKey", messageKey);
+            additionalData.put(Constants.MESSAGE_KEY_ADDITIONAL, messageKey);
 
             rawMessages.add(temp);
 

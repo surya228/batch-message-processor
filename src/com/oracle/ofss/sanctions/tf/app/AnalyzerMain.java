@@ -189,7 +189,7 @@ public class AnalyzerMain {
                         targetColumnName = additionalData.optString(Constants.COLUMN, "");
                         sourceInput = additionalData.optString(Constants.VALUE, "");
                         targetInput = additionalData.optString(Constants.ORIGINAL_VALUE, "");
-                        messageKey = additionalData.optString("MessageKey", "");
+                        messageKey = additionalData.optString(Constants.MESSAGE_KEY_ADDITIONAL, "");
                         ced = additionalData.optInt(Constants.CED, 0);
                     } else {
                         targetColumnName = "";
