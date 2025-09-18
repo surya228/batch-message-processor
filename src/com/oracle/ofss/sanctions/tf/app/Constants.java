@@ -75,7 +75,6 @@ public class Constants {
     public static String TNS_ADMIN =  "oracle.net.tns_admin";
 
     // JSON keys
-    public static String TABLE =  "table";
     public static String UID =  "uid";
     public static String COLUMN =  "column";
     public static String TOKEN =  "token";
