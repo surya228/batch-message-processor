@@ -187,13 +187,13 @@ public class AnalyzerMain {
                     // Check if we have feedback data and matches
                     boolean hasFeedback = eachResponse != null && eachResponse.has(Constants.MATCHES);
                     JSONArray matches = hasFeedback ? eachResponse.getJSONArray(Constants.MATCHES) : new JSONArray();
+                    int matchCount = matches.length();
 
                     String testStatus;
                     String comments;
                     int truePositives = 0;
                     boolean isColumnMismatch = false;
                     int filteredCount = 0;
-                    int matchCount = 0;
                     String feedbackStatus = "";
                     String feedback = "";
 
@@ -201,12 +201,16 @@ public class AnalyzerMain {
                         // No feedback data - mark as FAIL
                         testStatus = Constants.FAIL;
                         comments = "No feedback data available";
+                        feedbackStatus = eachResponse.optString(Constants.MATCHING_STATUS, "");
+                        feedback = eachResponse.toString();
+                        if (feedback.length() > 32767) {
+                            feedback = "Value too large check feedback table";
+                        }
                         logger.debug("Token {} has no feedback data, marking as FAIL", transactionToken);
                     } else if (matches.length() == 0) {
                         // Has feedback but no matches - mark as FAIL
                         testStatus = Constants.FAIL;
                         comments = "No matches found in feedback";
-                        matchCount = eachResponse.optInt(Constants.MATCHING_COUNT, 0);
                         feedbackStatus = eachResponse.optString(Constants.MATCHING_STATUS, "");
                         feedback = eachResponse.toString();
                         if (feedback.length() > 32767) {
@@ -252,7 +256,6 @@ public class AnalyzerMain {
                         }
 
                         testStatus = truePositives > 0 || isColumnMismatch ? Constants.PASS : Constants.FAIL;
-                        matchCount = eachResponse.optInt(Constants.MATCHING_COUNT, 0);
                         feedbackStatus = eachResponse.optString(Constants.MATCHING_STATUS, "");
                         feedback = eachResponse.toString();
                         if (feedback.length() > 32767) {
