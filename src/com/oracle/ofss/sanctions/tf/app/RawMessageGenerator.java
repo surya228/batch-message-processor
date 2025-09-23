@@ -41,7 +41,7 @@ public class RawMessageGenerator {
         }
     }
 
-    public static int generateRawMessage(BlockingQueue<File> queue, Properties props) throws Exception {
+    public static int generateRawMessage(BlockingQueue<File> queue, Properties props, String sourceFilePath, String configName) throws Exception {
         long startTime = System.currentTimeMillis();
         logger.info("=============================================================");
         logger.info("                RAW MESSAGE GENERATOR STARTED                ");
@@ -67,8 +67,8 @@ public class RawMessageGenerator {
 //                throw new Exception(e);
 //            }
 
-            SourceInputModel sourceModel = loadJsonFromFile(Constants.SOURCE_FILE_PATH);
-            logger.info("Loaded source model");
+            SourceInputModel sourceModel = loadJsonFromFile(sourceFilePath);
+            logger.info("Loaded source model from: {}", sourceFilePath);
 
 
             connection = SQLUtility.getDbConnection();
@@ -79,7 +79,7 @@ public class RawMessageGenerator {
             rawMessages = generateRawMessageJsonArray(rs, props, sourceModel, tagName, webserviceId, watchlistType, isStopwordEnabled, isSynonymEnabled, webService);
 
             if (!rawMessages.isEmpty()) {
-                writeRawMessagesToJsonFile(rawMessages, props);
+                writeRawMessagesToJsonFile(rawMessages, props, configName);
             }
 
             logger.info("=============================================================");
@@ -220,14 +220,15 @@ public class RawMessageGenerator {
                         String[] toBeReplacedValues = tokenValue.split(";");
 
                         for (String toBeReplaced : toBeReplacedValues) {
-
-                            List<Map<String, Object>> variantsWithInfo = generateSynonymVariantsWithInfo(toBeReplaced, synonymMap);
-                            for (Map<String, Object> info : variantsWithInfo) {
-                                String variant = (String) info.get("variant");
-                                String lookupIds = (String) info.get("lookupIds");
-                                String lookupValueIds = (String) info.get("lookupValueIds");
-                                temp = cloneSourceModel(sourceModel);
-                                updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, -2, uid, tagName, webserviceId, lookupIds, lookupValueIds, dateTimeStr, webService);
+                            if (isSynonymEnabled && !synonymMap.isEmpty()) {
+                                List<Map<String, Object>> variantsWithInfo = generateSynonymVariantsWithInfo(toBeReplaced, synonymMap);
+                                for (Map<String, Object> info : variantsWithInfo) {
+                                    String variant = (String) info.get("variant");
+                                    String lookupIds = (String) info.get("lookupIds");
+                                    String lookupValueIds = (String) info.get("lookupValueIds");
+                                    temp = cloneSourceModel(sourceModel);
+                                    updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, -2, uid, tagName, webserviceId, lookupIds, lookupValueIds, dateTimeStr, webService);
+                                }
                             }
 
 
@@ -622,7 +623,7 @@ public class RawMessageGenerator {
         }
     }
 
-    public static void writeRawMessagesToJsonFile(List<SourceInputModel> rawMessages, Properties props) throws IOException {
+    public static void writeRawMessagesToJsonFile(List<SourceInputModel> rawMessages, Properties props, String configName) throws IOException {
         if (!Constants.OUTPUT_FOLDER.exists()) {
             Constants.OUTPUT_FOLDER.mkdirs();
         }
@@ -643,11 +644,11 @@ public class RawMessageGenerator {
         String prefix;
         String shortPrefix;
         if ("ISO20022".equals(batchType)) {
-            prefix = misDate + "_RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
-            shortPrefix = "RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
+            prefix = configName + "_" + misDate + "_RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
+            shortPrefix = configName + "_RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
         } else if ("NACHA".equals(batchType)) {
-            prefix = misDate + "_RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
-            shortPrefix = "RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
+            prefix = configName + "_" + misDate + "_RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
+            shortPrefix = configName + "_RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
         } else {
             logger.error("Invalid batchtype: {}", batchType);
             throw new IllegalArgumentException("Invalid batchtype");

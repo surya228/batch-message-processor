@@ -489,7 +489,7 @@ public class AnalyzerMain {
 
     private static Properties loadProperties() throws IOException {
         Properties props = new Properties();
-        try (FileReader reader = new FileReader(Constants.CONFIG_FILE_PATH)) {
+        try (FileReader reader = new FileReader(Constants.COMMON_CONFIG_FILE_PATH)) {
             props.load(reader);
             logger.info("Properties file loaded");
         } catch (IOException e) {

@@ -102,6 +102,8 @@ public class Constants {
     public static File PARENT_DIRECTORY = new File(CURRENT_DIRECTORY).getParentFile();
     public static String SOURCE_FILE_PATH = PARENT_DIRECTORY+File.separator+BIN_FOLDER_NAME+File.separator+SOURCE_FILE_NAME+".json";
     public static String CONFIG_FILE_PATH = PARENT_DIRECTORY+File.separator+BIN_FOLDER_NAME+File.separator+CONFIG_FILE_NAME+".properties";
+    public static String COMMON_CONFIG_FILE_PATH = PARENT_DIRECTORY+File.separator+BIN_FOLDER_NAME+File.separator+"common.properties";
+    public static String BIN_DIR_PATH = PARENT_DIRECTORY+File.separator+BIN_FOLDER_NAME;
     public static File OUTPUT_FOLDER = new File(PARENT_DIRECTORY, OUTPUT_FOLDER_NAME);
 
     // Excel splitting configuration

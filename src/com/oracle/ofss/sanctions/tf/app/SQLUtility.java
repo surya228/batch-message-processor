@@ -20,7 +20,7 @@ public class SQLUtility {
     static {
         try {
             Properties props = new Properties();
-            try (FileReader reader = new FileReader(Constants.CONFIG_FILE_PATH)) {
+            try (FileReader reader = new FileReader(Constants.COMMON_CONFIG_FILE_PATH)) {
                 props.load(reader);
             }
 
