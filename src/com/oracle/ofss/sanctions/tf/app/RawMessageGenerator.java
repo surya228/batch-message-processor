@@ -70,13 +70,40 @@ public class RawMessageGenerator {
             SourceInputModel sourceModel = loadJsonFromFile(sourceFilePath);
             logger.info("Loaded source model from: {}", sourceFilePath);
 
-
             connection = SQLUtility.getDbConnection();
-            rs = prepareQueryAndGetTableData(connection, props, Constants.TABLE_WL_MAP.get(watchlistType));
 
+            // Split watchlistType by comma to support multiple watchlists
+            String[] watchlistTypes = watchlistType.split(",");
+            List<SourceInputModel> allRawMessages = new ArrayList<>();
 
+            for (String wlType : watchlistTypes) {
+                wlType = wlType.trim(); // Remove any whitespace
+                String tableName = Constants.TABLE_WL_MAP.get(wlType);
+                if (tableName == null) {
+                    logger.error("Unknown watchlist type: {}", wlType);
+                    continue;
+                }
 
-            rawMessages = generateRawMessageJsonArray(rs, props, sourceModel, tagName, webserviceId, watchlistType, isStopwordEnabled, isSynonymEnabled, webService);
+                // Get specific whereClause for this watchlist (whereClause_<watchlist>)
+                String specificWhereClause = props.getProperty("whereClause_" + wlType);
+                if (specificWhereClause == null) {
+                    // Fallback to generic whereClause if specific one not found
+                    specificWhereClause = props.getProperty(Constants.WHERE_CLAUSE, "");
+                }
+
+                logger.info("Processing watchlist: {} with table: {} and whereClause: {}", wlType, tableName, specificWhereClause);
+
+                rs = prepareQueryAndGetTableData(connection, tableName, specificWhereClause);
+
+                List<SourceInputModel> watchlistRawMessages = generateRawMessageJsonArray(rs, props, sourceModel, tagName, webserviceId, wlType, isStopwordEnabled, isSynonymEnabled, webService);
+                allRawMessages.addAll(watchlistRawMessages);
+
+                if (rs != null) {
+                    rs.close();
+                }
+            }
+
+            rawMessages = allRawMessages;
 
             if (!rawMessages.isEmpty()) {
                 writeRawMessagesToJsonFile(rawMessages, props, configName);
@@ -157,15 +184,15 @@ public class RawMessageGenerator {
     }
 
 
-    private static ResultSet prepareQueryAndGetTableData(Connection connection, Properties props, String tableName) throws Exception {
+    private static ResultSet prepareQueryAndGetTableData(Connection connection, String tableName, String whereClause) throws Exception {
         PreparedStatement pst = null;
         ResultSet rs = null;
-        String filter="";
-        if(props.containsKey(Constants.WHERE_CLAUSE)){
-            filter = " where "+ props.get(Constants.WHERE_CLAUSE);
+        String filter = "";
+        if (whereClause != null && !whereClause.trim().isEmpty()) {
+            filter = " where " + whereClause;
         }
 
-        String query = "select * from "+tableName+" "+filter;
+        String query = "select * from " + tableName + " " + filter;
         logger.info("SQL Query generated:: {}", query);
         try {
             pst = connection.prepareStatement(query);
