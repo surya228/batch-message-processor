@@ -59,13 +59,13 @@ public class RawMessageGenerator {
             boolean isStopwordEnabled = Constants.YES.equalsIgnoreCase(props.getProperty("stopword"));
             boolean isSynonymEnabled = Constants.YES.equalsIgnoreCase(props.getProperty("synonym"));
 
-            try {
-                validateConfigProperties(watchlistType, webserviceId, isStopwordEnabled, isSynonymEnabled);
-                logger.info("Config Properties Validation Passed.");
-            } catch (Exception e){
-                logger.info("Config Properties Validation Failed.");
-                throw new Exception(e);
-            }
+//            try {
+//                validateConfigProperties(watchlistType, webserviceId, isStopwordEnabled, isSynonymEnabled);
+//                logger.info("Config Properties Validation Passed.");
+//            } catch (Exception e){
+//                logger.info("Config Properties Validation Failed.");
+//                throw new Exception(e);
+//            }
 
             SourceInputModel sourceModel = loadJsonFromFile(Constants.SOURCE_FILE_PATH);
             logger.info("Loaded source model");
@@ -220,57 +220,56 @@ public class RawMessageGenerator {
                         String[] toBeReplacedValues = tokenValue.split(";");
 
                         for (String toBeReplaced : toBeReplacedValues) {
-                            if (isSynonymEnabled) {
-                                List<Map<String, Object>> variantsWithInfo = generateSynonymVariantsWithInfo(toBeReplaced, synonymMap, props);
-                                for (Map<String, Object> info : variantsWithInfo) {
-                                    String variant = (String) info.get("variant");
-                                    String lookupIds = (String) info.get("lookupIds");
-                                    String lookupValueIds = (String) info.get("lookupValueIds");
+
+                            List<Map<String, Object>> variantsWithInfo = generateSynonymVariantsWithInfo(toBeReplaced, synonymMap);
+                            for (Map<String, Object> info : variantsWithInfo) {
+                                String variant = (String) info.get("variant");
+                                String lookupIds = (String) info.get("lookupIds");
+                                String lookupValueIds = (String) info.get("lookupValueIds");
+                                temp = cloneSourceModel(sourceModel);
+                                updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, -2, uid, tagName, webserviceId, lookupIds, lookupValueIds, dateTimeStr, webService);
+                            }
+
+
+                            // 0 ced -> exact
+                            temp = cloneSourceModel(sourceModel);
+                            updatedCount = createRawMsg(temp, toBeReplaced, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, 0, uid, tagName, webserviceId, "NA", "NA", dateTimeStr, webService);
+
+                            if (props.getProperty(Constants.CED1).equalsIgnoreCase(Constants.YES)) { // 1 ced
+                                List<String> oneCedList = generate1CedVariants(toBeReplaced);
+                                for (String value : oneCedList) {
                                     temp = cloneSourceModel(sourceModel);
-                                    updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, -2, uid, tagName, webserviceId, lookupIds, lookupValueIds, dateTimeStr, webService);
+                                    updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, 1, uid, tagName, webserviceId, "NA", "NA", dateTimeStr, webService);
                                 }
-                            } else {
-                                if (!isStopwordEnabled) {
-                                    // 0 ced -> exact
+                            }
+
+                            if (props.getProperty(Constants.CED2).equalsIgnoreCase(Constants.YES)) { // 2 ced
+                                List<String> twoCedList = generate2CedVariants(toBeReplaced);
+                                for (String value : twoCedList) {
                                     temp = cloneSourceModel(sourceModel);
-                                    updatedCount = createRawMsg(temp, toBeReplaced, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, 0, uid, tagName, webserviceId, "NA", "NA", dateTimeStr, webService);
-
-                                    if (props.getProperty(Constants.CED1).equalsIgnoreCase(Constants.YES)) { // 1 ced
-                                        List<String> oneCedList = generate1CedVariants(toBeReplaced);
-                                        for (String value : oneCedList) {
-                                            temp = cloneSourceModel(sourceModel);
-                                            updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, 1, uid, tagName, webserviceId, "NA", "NA", dateTimeStr, webService);
-                                        }
-                                    }
-
-                                    if (props.getProperty(Constants.CED2).equalsIgnoreCase(Constants.YES)) { // 2 ced
-                                        List<String> twoCedList = generate2CedVariants(toBeReplaced);
-                                        for (String value : twoCedList) {
-                                            temp = cloneSourceModel(sourceModel);
-                                            updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, 2, uid, tagName, webserviceId, "NA", "NA", dateTimeStr, webService);
-                                        }
-                                    }
-
-                                    if (props.getProperty(Constants.CED3).equalsIgnoreCase(Constants.YES)) { // 3 ced
-                                        List<String> threeCedList = generate3CedVariants(toBeReplaced);
-                                        for (String value : threeCedList) {
-                                            temp = cloneSourceModel(sourceModel);
-                                            updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, 3, uid, tagName, webserviceId, "NA", "NA", dateTimeStr, webService);
-                                        }
-                                    }
+                                    updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, 2, uid, tagName, webserviceId, "NA", "NA", dateTimeStr, webService);
                                 }
+                            }
 
-                                // Stopword variants
-                                if (isStopwordEnabled && stopwords != null && !stopwords.isEmpty()) {
-                                    for (Object[] pair : stopwords) {
-                                        String stop = (String) pair[0];
-                                        String lookupId = (String) pair[1];
-                                        String lookupValueId = (String) pair[2];
-                                        List<String> variants = generateStopwordVariants(toBeReplaced, stop);
-                                        for (String variant : variants) {
-                                            temp = cloneSourceModel(sourceModel);
-                                            updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, -1, uid, tagName, webserviceId, lookupId, lookupValueId, dateTimeStr, webService);
-                                        }
+                            if (props.getProperty(Constants.CED3).equalsIgnoreCase(Constants.YES)) { // 3 ced
+                                List<String> threeCedList = generate3CedVariants(toBeReplaced);
+                                for (String value : threeCedList) {
+                                    temp = cloneSourceModel(sourceModel);
+                                    updatedCount = createRawMsg(temp, value, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, 3, uid, tagName, webserviceId, "NA", "NA", dateTimeStr, webService);
+                                }
+                            }
+
+
+                            // Stopword variants
+                            if (isStopwordEnabled && stopwords != null && !stopwords.isEmpty()) {
+                                for (Object[] pair : stopwords) {
+                                    String stop = (String) pair[0];
+                                    String lookupId = (String) pair[1];
+                                    String lookupValueId = (String) pair[2];
+                                    List<String> variants = generateStopwordVariants(toBeReplaced, stop);
+                                    for (String variant : variants) {
+                                        temp = cloneSourceModel(sourceModel);
+                                        updatedCount = createRawMsg(temp, variant, identifierToBeReplaced, token, targetColumn, identifierToken, watchlistType, rawMessages, updatedCount, tokenValue, -1, uid, tagName, webserviceId, lookupId, lookupValueId, dateTimeStr, webService);
                                     }
                                 }
                             }
@@ -335,22 +334,6 @@ public class RawMessageGenerator {
             updatedCount++;
         }
         return updatedCount;
-    }
-    public static List<String> generate1CedVariants(String input) {
-        List<String> variants = new ArrayList<>();
-        int len = input.length();
-
-        // Delete
-        if (len >= 1) variants.add(input.substring(1)); // remove first
-        if (len >= 3) variants.add(input.substring(0, len / 2) + input.substring((len / 2) + 1)); // remove middle
-        if (len >= 1) variants.add(input.substring(0, len - 1)); // remove last
-
-//        // Insert
-//        variants.add(INSERT_CHAR + input); // insert at start
-//        variants.add(input.substring(0, len / 2) + INSERT_CHAR + input.substring(len / 2)); // middle
-//        variants.add(input + INSERT_CHAR); // insert at end
-
-        return variants;
     }
 
     private static List<Object[]> getRelevantStopwords(Properties props, Connection connection) throws SQLException {
@@ -442,94 +425,49 @@ public class RawMessageGenerator {
         return lookupIds;
     }
 
-    private static List<Map<String, Object>> generateSynonymVariantsWithInfo(String toBeReplaced, Map<String, Map<String, String>> synonymMap, Properties props) {
+    private static List<Map<String, Object>> generateSynonymVariantsWithInfo(String toBeReplaced, Map<String, Map<String, String>> synonymMap) {
         List<Map<String, Object>> result = new ArrayList<>();
-        boolean multiword = "Y".equalsIgnoreCase(props.getProperty("synonym.multiword", "N"));
-        boolean multipleGroups = "Y".equalsIgnoreCase(props.getProperty("synonym.multipleGroups", "N"));
 
-        if (!multiword) {
-            Set<String> usedLookupIds = new HashSet<>();
-            Set<String> usedValueIds = new HashSet<>();
-            List<String> alts = new ArrayList<>();
-            boolean found = false;
-            outer: for (Map.Entry<String, Map<String, String>> lookupEntry : synonymMap.entrySet()) {
+        String[] words = toBeReplaced.split("\\s+");
+        List<List<String>> options = new ArrayList<>();
+        List<Set<String>> lidsPer = new ArrayList<>();
+        List<Set<String>> vidsPer = new ArrayList<>();
+        for (String word : words) {
+            List<String> wordOptions = new ArrayList<>();
+            wordOptions.add(word);
+            Set<String> wordLids = new HashSet<>();
+            Set<String> wordVids = new HashSet<>();
+            for (Map.Entry<String, Map<String, String>> lookupEntry : synonymMap.entrySet()) {
                 String lookupId = lookupEntry.getKey();
                 for (Map.Entry<String, String> valueEntry : lookupEntry.getValue().entrySet()) {
                     String valueId = valueEntry.getKey();
                     String valuesStr = valueEntry.getValue();
                     String[] synonyms = valuesStr.split(",");
-                    boolean matchFound = false;
+                    boolean wordMatch = false;
                     for (String syn : synonyms) {
-                        if (syn.equalsIgnoreCase(toBeReplaced)) {
-                            matchFound = true;
+                        if (syn.equalsIgnoreCase(word)) {
+                            wordMatch = true;
                             break;
                         }
                     }
-                    if (matchFound) {
-                        found = true;
-                        usedLookupIds.add(lookupId);
-                        usedValueIds.add(valueId);
+                    if (wordMatch) {
+                        wordLids.add(lookupId);
+                        wordVids.add(valueId);
                         for (String alt : synonyms) {
-                            if (!alt.equalsIgnoreCase(toBeReplaced) && !alts.contains(alt)) {
-                                alts.add(alt);
+                            if (!alt.equalsIgnoreCase(word) && !wordOptions.contains(alt)) {
+                                wordOptions.add(alt);
                             }
                         }
-                        if (!multipleGroups) break outer;
+
                     }
                 }
             }
-            if (!alts.isEmpty()) {
-                String lids = String.join(",", usedLookupIds);
-                String vids = String.join(",", usedValueIds);
-                for (String alt : alts) {
-                    Map<String, Object> info = new HashMap<>();
-                    info.put("variant", alt);
-                    info.put("lookupIds", lids);
-                    info.put("lookupValueIds", vids);
-                    result.add(info);
-                }
-            }
-        } else {
-            String[] words = toBeReplaced.split("\\s+");
-            List<List<String>> options = new ArrayList<>();
-            List<Set<String>> lidsPer = new ArrayList<>();
-            List<Set<String>> vidsPer = new ArrayList<>();
-            for (String word : words) {
-                List<String> wordOptions = new ArrayList<>();
-                wordOptions.add(word);
-                Set<String> wordLids = new HashSet<>();
-                Set<String> wordVids = new HashSet<>();
-                outer: for (Map.Entry<String, Map<String, String>> lookupEntry : synonymMap.entrySet()) {
-                    String lookupId = lookupEntry.getKey();
-                    for (Map.Entry<String, String> valueEntry : lookupEntry.getValue().entrySet()) {
-                        String valueId = valueEntry.getKey();
-                        String valuesStr = valueEntry.getValue();
-                        String[] synonyms = valuesStr.split(",");
-                        boolean wordMatch = false;
-                        for (String syn : synonyms) {
-                            if (syn.equalsIgnoreCase(word)) {
-                                wordMatch = true;
-                                break;
-                            }
-                        }
-                        if (wordMatch) {
-                            wordLids.add(lookupId);
-                            wordVids.add(valueId);
-                            for (String alt : synonyms) {
-                                if (!alt.equalsIgnoreCase(word) && !wordOptions.contains(alt)) {
-                                    wordOptions.add(alt);
-                                }
-                            }
-                            if (!multipleGroups) break outer;
-                        }
-                    }
-                }
-                options.add(wordOptions);
-                lidsPer.add(wordLids);
-                vidsPer.add(wordVids);
-            }
-            generateCombinations(options, lidsPer, vidsPer, words, 0, new ArrayList<>(), new HashSet<>(), new HashSet<>(), result, toBeReplaced, new HashSet<>());
+            options.add(wordOptions);
+            lidsPer.add(wordLids);
+            vidsPer.add(wordVids);
         }
+        generateCombinations(options, lidsPer, vidsPer, words, 0, new ArrayList<>(), new HashSet<>(), new HashSet<>(), result, toBeReplaced, new HashSet<>());
+
         return result;
     }
 
@@ -589,9 +527,28 @@ public class RawMessageGenerator {
         return variants;
     }
 
+    public static List<String> generate1CedVariants(String input) {
+        List<String> variants = new ArrayList<>();
+        int len = input.length();
+        String insertChar = Constants.INSERT_CHAR;
+
+        // Delete
+        if (len >= 1) variants.add(input.substring(1)); // remove first
+        if (len >= 3) variants.add(input.substring(0, len / 2) + input.substring((len / 2) + 1)); // remove middle
+        if (len >= 1) variants.add(input.substring(0, len - 1)); // remove last
+
+        // Insert
+        variants.add(insertChar + input); // insert at start
+        variants.add(input.substring(0, len / 2) + insertChar + input.substring(len / 2)); // middle
+        variants.add(input + insertChar); // insert at end
+
+        return variants;
+    }
+
     public static List<String> generate2CedVariants(String input) {
         List<String> variants = new ArrayList<>();
         int len = input.length();
+        String insertChar = Constants.INSERT_CHAR;
 
         // Delete 2 characters
         if (len >= 3) {
@@ -600,10 +557,10 @@ public class RawMessageGenerator {
             variants.add(input.substring(0, len - 2)); // remove last two
         }
 
-//        // Insert 2 characters
-//        variants.add(INSERT_CHAR + INSERT_CHAR + input); // insert two at start
-//        variants.add(input.substring(0, len / 2) + INSERT_CHAR + INSERT_CHAR + input.substring(len / 2)); // middle
-//        variants.add(input + INSERT_CHAR + INSERT_CHAR); // insert two at end
+        // Insert 2 characters
+        variants.add(insertChar + insertChar + input); // insert two at start
+        variants.add(input.substring(0, len / 2) + insertChar + insertChar + input.substring(len / 2)); // middle
+        variants.add(input + insertChar + insertChar); // insert two at end
 
         return variants;
     }
@@ -611,6 +568,7 @@ public class RawMessageGenerator {
     public static List<String> generate3CedVariants(String input) {
         List<String> variants = new ArrayList<>();
         int len = input.length();
+        String insertChar = Constants.INSERT_CHAR;
 
         // Delete 3 characters
         if (len >= 4) {
@@ -619,10 +577,10 @@ public class RawMessageGenerator {
             variants.add(input.substring(0, len - 3)); // remove last 3
         }
 
-//        // Insert 3 characters
-//        variants.add("" + INSERT_CHAR + INSERT_CHAR + INSERT_CHAR + input); // insert 3 at start
-//        variants.add(input.substring(0, len / 2) + INSERT_CHAR + INSERT_CHAR + INSERT_CHAR + input.substring(len / 2)); // middle
-//        variants.add(input + INSERT_CHAR + INSERT_CHAR + INSERT_CHAR); // end
+        // Insert 3 characters
+        variants.add("" + insertChar + insertChar + insertChar + input); // insert 3 at start
+        variants.add(input.substring(0, len / 2) + insertChar + insertChar + insertChar + input.substring(len / 2)); // middle
+        variants.add(input + insertChar + insertChar + insertChar); // end
 
         return variants;
     }

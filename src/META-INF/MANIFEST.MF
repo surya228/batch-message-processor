@@ -1,3 +1,3 @@
 Manifest-Version: 1.0
-Main-Class: com.oracle.ofss.sanctions.tf.app.AnalyzerMain
+Main-Class: com.oracle.ofss.sanctions.tf.app.RawMessageGeneratorMain
 
