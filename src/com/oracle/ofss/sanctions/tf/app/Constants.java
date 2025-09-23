@@ -112,6 +112,7 @@ public class Constants {
     public static String EXCEL_ROW_LIMIT = "excelRowLimit";
     public static int DEFAULT_EXCEL_ROW_LIMIT = 1000;
     public static String FILE_NAME_LIST = "filename.txt";
+    public static String RUN_DETAILS_FILE_NAME = "run_details.json";
 
     // Status strings
     public static String PASS = "PASS";

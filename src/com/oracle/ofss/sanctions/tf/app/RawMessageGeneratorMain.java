@@ -1,5 +1,7 @@
 package com.oracle.ofss.sanctions.tf.app;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +34,8 @@ public class RawMessageGeneratorMain {
         }
 
         int totalGeneratedCount = 0;
+        JSONArray runDetails = new JSONArray();
+
         for (String configName : enabledConfigs) {
             logger.info("Processing config: {}", configName);
 
@@ -63,16 +67,25 @@ public class RawMessageGeneratorMain {
 
             // Generate raw messages
             int generatedCount = RawMessageGenerator.generateRawMessage(null, mergedProps, sourceFile.getPath(), configName);
+
+            // Calculate file count based on row limit
+            int rowLimit = Constants.DEFAULT_ROW_LIMIT;
+            try {
+                String rowLimitStr = mergedProps.getProperty(Constants.JSON_OBJJECT_LIMIT, String.valueOf(Constants.DEFAULT_ROW_LIMIT));
+                rowLimit = Integer.parseInt(rowLimitStr);
+            } catch (NumberFormatException e) {
+                logger.error("Invalid row limit value for config {}, using default: {}", configName, Constants.DEFAULT_ROW_LIMIT);
+            }
+            int fileCount = generatedCount > 0 ? (int) Math.ceil((double) generatedCount / rowLimit) : 0;
+
+            // Create run details object for this config
+            JSONObject configDetails = new JSONObject();
+            configDetails.put("configName", configName);
+            configDetails.put("fileCount", fileCount);
+            configDetails.put("rawMessageCount", generatedCount);
+            runDetails.put(configDetails);
+
             if (generatedCount > 0) {
-                // Calculate file count based on row limit
-                int rowLimit = Constants.DEFAULT_ROW_LIMIT;
-                try {
-                    String rowLimitStr = mergedProps.getProperty(Constants.JSON_OBJJECT_LIMIT, String.valueOf(Constants.DEFAULT_ROW_LIMIT));
-                    rowLimit = Integer.parseInt(rowLimitStr);
-                } catch (NumberFormatException e) {
-                    logger.error("Invalid row limit value for config {}, using default: {}", configName, Constants.DEFAULT_ROW_LIMIT);
-                }
-                int fileCount = (int) Math.ceil((double) generatedCount / rowLimit);
                 logger.info("Config {}: Generated {} raw messages across {} JSON files.", configName, generatedCount, fileCount);
                 totalGeneratedCount += generatedCount;
             } else {
@@ -84,6 +97,9 @@ public class RawMessageGeneratorMain {
             logger.info("No raw messages generated for any config. Exiting utility.");
             System.exit(0);
         }
+
+        // Write run details to JSON file
+        writeRunDetailsToFile(runDetails);
 
         logger.info("=============================================================");
         logger.info("               RAW MESSAGE GENERATOR ENDED                 ");
@@ -171,5 +187,23 @@ public class RawMessageGeneratorMain {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Writes the run details JSONArray to run_details.json file.
+     * @param runDetails The JSONArray containing run details for all configs
+     */
+    private static void writeRunDetailsToFile(JSONArray runDetails) {
+        if (!Constants.OUTPUT_FOLDER.exists()) {
+            Constants.OUTPUT_FOLDER.mkdirs();
+        }
+
+        File runDetailsFile = new File(Constants.OUTPUT_FOLDER, Constants.RUN_DETAILS_FILE_NAME);
+        try (java.io.FileWriter writer = new java.io.FileWriter(runDetailsFile)) {
+            writer.write(runDetails.toString(2)); // Pretty print with 2-space indentation
+            logger.info("Run details written to: {}", runDetailsFile.getAbsolutePath());
+        } catch (IOException e) {
+            logger.error("Error writing run details to file: {}", e.getMessage());
+        }
     }
 }
