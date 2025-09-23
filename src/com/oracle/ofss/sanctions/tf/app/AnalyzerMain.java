@@ -58,10 +58,10 @@ public class AnalyzerMain {
 //        String matchHeader = (osReportRows != null || otReportRows != null) ? "# " + Constants.getMatchHeaderSuffix(webServiceId, watchListType) + " "+ Constants.MATCHES : null;
         String matchHeader = "Specific Count";
         if (osReportRows != null) {
-            writeSplitExcel(osReportRows, misDate, runNo, batchType, matchHeader, "OS", excelRowLimit);
+            writeSplitExcel(osReportRows, misDate, runNo, batchType, matchHeader, Constants.OS_SHEET_NAME, excelRowLimit);
         }
         if (otReportRows != null) {
-            writeSplitExcel(otReportRows, misDate, runNo, batchType, matchHeader, "OT", excelRowLimit);
+            writeSplitExcel(otReportRows, misDate, runNo, batchType, matchHeader, Constants.OT_SHEET_NAME, excelRowLimit);
         }
 
     }
