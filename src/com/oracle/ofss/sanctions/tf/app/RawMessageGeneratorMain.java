@@ -5,6 +5,7 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class RawMessageGeneratorMain {
     private static final Logger logger = LoggerFactory.getLogger(RawMessageGeneratorMain.class);
@@ -35,6 +37,8 @@ public class RawMessageGeneratorMain {
 
         int totalGeneratedCount = 0;
         JSONArray runDetails = new JSONArray();
+        List<String> allFileEntries = new ArrayList<>();
+        AtomicInteger currentIndex = new AtomicInteger(1);
 
         for (String configName : enabledConfigs) {
             logger.info("Processing config: {}", configName);
@@ -66,7 +70,8 @@ public class RawMessageGeneratorMain {
 //            saveConfigProperties(mergedProps, configName);
 
             // Generate raw messages
-            int generatedCount = RawMessageGenerator.generateRawMessage(null, mergedProps, sourceFile.getPath(), configName);
+            List<SourceInputModel> rawMessages = RawMessageGenerator.generateRawMessage(null, mergedProps, sourceFile.getPath(), configName);
+            int generatedCount = rawMessages.size();
 
             // Calculate file count based on row limit
             int rowLimit = Constants.DEFAULT_ROW_LIMIT;
@@ -76,7 +81,13 @@ public class RawMessageGeneratorMain {
             } catch (NumberFormatException e) {
                 logger.error("Invalid row limit value for config {}, using default: {}", configName, Constants.DEFAULT_ROW_LIMIT);
             }
-            int fileCount = generatedCount > 0 ? (int) Math.ceil((double) generatedCount / rowLimit) : 0;
+            int fileCount = 0;
+
+            if (!rawMessages.isEmpty()) {
+                List<String> fileEntries = RawMessageGenerator.writeRawMessagesToJsonFile(rawMessages, mergedProps, configName, currentIndex);
+                allFileEntries.addAll(fileEntries);
+                fileCount = fileEntries.size();
+            }
 
             // Create run details object for this config
             JSONObject configDetails = new JSONObject();
@@ -96,6 +107,20 @@ public class RawMessageGeneratorMain {
         if (totalGeneratedCount == 0) {
             logger.info("No raw messages generated for any config. Exiting utility.");
             System.exit(0);
+        }
+
+        // Write filename.txt
+        if (!allFileEntries.isEmpty()) {
+            File listFile = new File(Constants.OUTPUT_FOLDER, Constants.FILE_NAME_LIST);
+            try (BufferedWriter writer = new BufferedWriter(new java.io.FileWriter(listFile))) {
+                for (String fileEntry : allFileEntries) {
+                    writer.write(fileEntry);
+                    writer.newLine();
+                }
+            } catch (IOException e) {
+                logger.error("Error writing filename.txt: {}", e.getMessage());
+            }
+            logger.info("filename.txt created with list of files.");
         }
 
         // Write run details to JSON file

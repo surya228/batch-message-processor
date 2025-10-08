@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -41,7 +42,7 @@ public class RawMessageGenerator {
         }
     }
 
-    public static int generateRawMessage(BlockingQueue<File> queue, Properties props, String sourceFilePath, String configName) throws Exception {
+    public static List<SourceInputModel> generateRawMessage(BlockingQueue<File> queue, Properties props, String sourceFilePath, String configName) throws Exception {
         long startTime = System.currentTimeMillis();
         logger.info("=============================================================");
         logger.info("                RAW MESSAGE GENERATOR STARTED                ");
@@ -105,10 +106,6 @@ public class RawMessageGenerator {
 
             rawMessages = allRawMessages;
 
-            if (!rawMessages.isEmpty()) {
-                writeRawMessagesToJsonFile(rawMessages, props, configName);
-            }
-
             logger.info("=============================================================");
             logger.info("                 RAW MESSAGE GENERATOR ENDED                 ");
             logger.info("=============================================================");
@@ -132,7 +129,7 @@ public class RawMessageGenerator {
                 }
             }
         }
-        return rawMessages != null ? rawMessages.size() : 0;
+        return rawMessages;
     }
 
     private static boolean validateConfigProperties(String watchlistType, String webserviceId, boolean isStopwordEnabled, boolean isSynonymEnabled) throws Exception {
@@ -650,7 +647,7 @@ public class RawMessageGenerator {
         }
     }
 
-    public static void writeRawMessagesToJsonFile(List<SourceInputModel> rawMessages, Properties props, String configName) throws IOException {
+    public static List<String> writeRawMessagesToJsonFile(List<SourceInputModel> rawMessages, Properties props, String configName, AtomicInteger currentIndex) throws IOException {
         if (!Constants.OUTPUT_FOLDER.exists()) {
             Constants.OUTPUT_FOLDER.mkdirs();
         }
@@ -671,11 +668,11 @@ public class RawMessageGenerator {
         String prefix;
         String shortPrefix;
         if ("ISO20022".equals(batchType)) {
-            prefix = configName + "_" + misDate + "_RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
-            shortPrefix = configName + "_RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
+            prefix = misDate + "_RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
+            shortPrefix = "RUN" + runNo + "_STG_TRANSACTIONS_ENTRY_";
         } else if ("NACHA".equals(batchType)) {
-            prefix = configName + "_" + misDate + "_RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
-            shortPrefix = configName + "_RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
+            prefix = misDate + "_RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
+            shortPrefix = "RUN" + runNo + "_ACH_STG_TRANSACTIONS_ENTRY_";
         } else {
             logger.error("Invalid batchtype: {}", batchType);
             throw new IllegalArgumentException("Invalid batchtype");
@@ -688,39 +685,29 @@ public class RawMessageGenerator {
 
         if (rawMessages.size() <= rowLimit) {
             // Write to a single file if splitting is not enabled or data is within limit
-            String fileName = prefix + "1" + Constants.JSON_EXT;
+            int fileIndex = currentIndex.getAndIncrement();
+            String fileName = prefix + fileIndex + Constants.JSON_EXT;
             File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
             mapper.writeValue(outputFile, rawMessages);
-            fileList.add(shortPrefix + "1");
+            fileList.add(shortPrefix + fileIndex);
             logger.info("Successfully wrote raw messages to JSON file: {}", fileName);
         } else {
             // Split data into multiple files
-            int fileIndex = 1;
             int startIndex = 0;
             while (startIndex < rawMessages.size()) {
                 int endIndex = Math.min(startIndex + rowLimit, rawMessages.size());
                 List<SourceInputModel> chunk = rawMessages.subList(startIndex, endIndex);
+                int fileIndex = currentIndex.getAndIncrement();
                 String fileName = prefix + fileIndex + Constants.JSON_EXT;
                 File outputFile = new File(Constants.OUTPUT_FOLDER, fileName);
                 mapper.writeValue(outputFile, chunk);
                 fileList.add(shortPrefix + fileIndex);
                 logger.info("Successfully wrote raw messages to JSON file: {}", fileName);
-                fileIndex++;
                 startIndex = endIndex;
             }
             logger.info("Successfully wrote to multiple JSON files with prefix: {}", prefix);
         }
 
-        // Write filename.txt
-        File listFile = new File(Constants.OUTPUT_FOLDER, Constants.FILE_NAME_LIST);
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(listFile))) {
-            for (String fileEntry : fileList) {
-                writer.write(fileEntry);
-                writer.newLine();
-            }
-        } catch (IOException e) {
-            logger.error("Error writing filename.txt: {}", e.getMessage());
-        }
-        logger.info("filename.txt created with list of files.");
+        return fileList;
     }
 }
